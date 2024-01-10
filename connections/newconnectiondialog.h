@@ -48,6 +48,7 @@ private:
     void selectKayak();
     void selectMQTT();
     void selectLawicel();
+    void selectCarbus();
     void selectCANserver();
     void selectCANlogserver();
     bool isSerialBusAvailable();

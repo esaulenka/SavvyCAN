@@ -5,6 +5,7 @@
 #include "mqtt_bus.h"
 #include "socketcand.h"
 #include "lawicel_serial.h"
+#include "carbus_serial.h"
 #include "canserver.h"
 #include "canlogserver.h"
 
@@ -24,6 +25,8 @@ CANConnection* CanConFactory::create(type pType, QString pPortName, QString pDri
         return new GVRetSerial(pPortName, true);  //it's a special case of GVRET connected over TCP/IP so it uses the same class
     case LAWICEL:
         return new LAWICELSerial(pPortName, pSerialSpeed, pBusSpeed, pCanFd, pDataRate);
+    case CARBUS:
+        return new CARBUSSerial(pPortName, pSerialSpeed, pBusSpeed, pCanFd, pDataRate);
     case KAYAK:
         return new SocketCANd(pPortName);
     case MQTT:

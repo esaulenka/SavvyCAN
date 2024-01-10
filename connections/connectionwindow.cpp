@@ -418,6 +418,16 @@ void ConnectionWindow::populateBusDetails(int offset)
             ui->dataRate_label->setVisible(true);
         }
 
+        //todo is it needed?
+        if (conn_p->getType() == CANCon::type::CARBUS || conn_p->getType() == CANCon::type::CARBUS)
+        {
+            ui->canFDEnable->setVisible(true);
+            ui->canFDEnable_label->setVisible(true);
+            ui->canFDEnable->setChecked(bus.isCanFD());
+            ui->cbDataRate->setVisible(true);
+            ui->dataRate_label->setVisible(true);
+        }
+
         bool found = false;
         for (int i = 0; i < ui->cbBusSpeed->count(); i++)
         {

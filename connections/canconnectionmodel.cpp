@@ -87,6 +87,7 @@ QVariant CANConnectionModel::data(const QModelIndex &index, int role) const
                         case CANCon::GVRET_SERIAL: return "GVRET";
                         case CANCon::KAYAK: return "socketcand";
                         case CANCon::LAWICEL: return "LAWICEL";
+                        case CANCon::CARBUS: return "CARBUS";
                         case CANCon::CANSERVER: return "CANserver";
                         case CANCon::CANLOGSERVER: return "CanLogServer";
                         default: {}

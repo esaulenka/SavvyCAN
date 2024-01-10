@@ -8,6 +8,8 @@ QT = core gui printsupport qml serialbus serialport widgets help network opengl
 
 CONFIG(release, debug|release):DEFINES += QT_NO_DEBUG_OUTPUT
 
+CONFIG+=sdk_no_version_check
+
 CONFIG += c++11
 CONFIG += NO_UNIT_TESTS
 
@@ -24,6 +26,7 @@ SOURCES += main.cpp\
     connections/canlogserver.cpp \
     connections/canserver.cpp \
     connections/lawicel_serial.cpp \
+    connections/carbus_serial.cpp \
     connections/mqtt_bus.cpp \
     dbc/dbcnodeduplicateeditor.cpp \
     mqtt/qmqtt_client.cpp \
@@ -109,6 +112,7 @@ HEADERS  += mainwindow.h \
     connections/canlogserver.h \
     connections/canserver.h \
     connections/lawicel_serial.h \
+    connections/carbus_serial.h \
     connections/socketcand.h \
     connections/mqtt_bus.h \
     dbc/dbcnodeduplicateeditor.h \

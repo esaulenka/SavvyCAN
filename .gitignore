@@ -39,6 +39,7 @@ SavvyCAN
 SavvyCAN.pro.user.*
 .qmake.stash
 Makefile
+.qtc_clangd/
 
 # Editor files
 *.code-workspace

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>426</width>
-    <height>540</height>
+    <height>582</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -22,32 +22,8 @@
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
-     <layout class="QGridLayout" name="gridLayout">
-      <item row="4" column="0">
-       <widget class="QRadioButton" name="rbKayak">
-        <property name="text">
-         <string>socketcand (SocketCAN over Ethernet)</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0">
-       <widget class="QRadioButton" name="rbSocketCAN">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="text">
-         <string>QT SerialBus Devices (SocketCAN, PeakCAN, etc)</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0">
-       <widget class="QRadioButton" name="rbMQTT">
-        <property name="text">
-         <string>MQTT Connection</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <item>
        <widget class="QRadioButton" name="rbGVRET">
         <property name="text">
          <string>Serial Connection (GVRET)</string>
@@ -57,28 +33,59 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="0">
+      <item>
        <widget class="QRadioButton" name="rbRemote">
         <property name="text">
          <string>Network connection (GVRET)</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="0">
+      <item>
        <widget class="QRadioButton" name="rbLawicel">
         <property name="text">
          <string>LAWICEL / SLCAN Serial</string>
         </property>
        </widget>
       </item>
-      <item row="6" column="0">
+      <item>
+       <widget class="QRadioButton" name="rbCarbus">
+        <property name="text">
+         <string>CARBUS / CarBus Serial</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="rbSocketCAN">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>QT SerialBus Devices (SocketCAN, PeakCAN, etc)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="rbKayak">
+        <property name="text">
+         <string>socketcand (SocketCAN over Ethernet)</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QRadioButton" name="rbMQTT">
+        <property name="text">
+         <string>MQTT Connection</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QRadioButton" name="rbCANserver">
         <property name="text">
          <string>CANserver</string>
         </property>
        </widget>
       </item>
-      <item row="7" column="0">
+      <item>
        <widget class="QRadioButton" name="rbCanlogserver">
         <property name="text">
          <string>CANlogserver</string>

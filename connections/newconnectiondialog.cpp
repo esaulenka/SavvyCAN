@@ -28,6 +28,7 @@ NewConnectionDialog::NewConnectionDialog(QVector<QString>* gvretips, QVector<QSt
     connect(ui->rbKayak, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
     connect(ui->rbMQTT, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
     connect(ui->rbLawicel, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
+    connect(ui->rbCarbus, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
     connect(ui->rbCANserver, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
     connect(ui->rbCanlogserver, &QAbstractButton::clicked, this, &NewConnectionDialog::handleConnTypeChanged);
 
@@ -65,6 +66,7 @@ void NewConnectionDialog::handleConnTypeChanged()
     if (ui->rbGVRET->isChecked()) selectSerial();
     if (ui->rbSocketCAN->isChecked()) selectSocketCan();
     if (ui->rbLawicel->isChecked()) selectLawicel();
+    if (ui->rbCarbus->isChecked()) selectCarbus();
     if (ui->rbRemote->isChecked()) selectRemote();
     if (ui->rbKayak->isChecked()) selectKayak();
     if (ui->rbMQTT->isChecked()) selectMQTT();
@@ -83,6 +85,59 @@ void NewConnectionDialog::handleDeviceTypeChanged()
 }
 
 void NewConnectionDialog::selectLawicel()
+{
+    ui->lPort->setText("Serial Port:");
+
+    ui->lblDeviceType->setHidden(true);
+    ui->cbDeviceType->setHidden(true);
+
+    ui->cbCANSpeed->setHidden(false);
+    ui->cbSerialSpeed->setHidden(false);
+    ui->lblCANSpeed->setHidden(false);
+    ui->lblSerialSpeed->setHidden(false);
+    ui->cbCanFd->setHidden(false);
+    ui->cbDataRate->setHidden(false);
+    ui->lblDataRate->setHidden(false);
+
+    ui->cbPort->clear();
+    ports = QSerialPortInfo::availablePorts();
+
+    for (int i = 0; i < ports.count(); i++)
+        ui->cbPort->addItem(ports[i].portName());
+
+    if (ui->cbCANSpeed->count() == 0)
+    {
+        ui->cbCANSpeed->addItem("10000");
+        ui->cbCANSpeed->addItem("20000");
+        ui->cbCANSpeed->addItem("50000");
+        ui->cbCANSpeed->addItem("83333");
+        ui->cbCANSpeed->addItem("100000");
+        ui->cbCANSpeed->addItem("125000");
+        ui->cbCANSpeed->addItem("250000");
+        ui->cbCANSpeed->addItem("500000");
+        ui->cbCANSpeed->addItem("1000000");
+    }
+    if (ui->cbDataRate->count() == 0)
+    {
+        ui->cbDataRate->addItem("1000000");
+        ui->cbDataRate->addItem("2000000");
+        ui->cbDataRate->addItem("4000000");
+        ui->cbDataRate->addItem("5000000");
+    }
+    if (ui->cbSerialSpeed->count() == 0)
+    {
+        ui->cbSerialSpeed->addItem("115200");
+        ui->cbSerialSpeed->addItem("150000");
+        ui->cbSerialSpeed->addItem("250000");
+        ui->cbSerialSpeed->addItem("500000");
+        ui->cbSerialSpeed->addItem("1000000");
+        ui->cbSerialSpeed->addItem("2000000");
+        ui->cbSerialSpeed->addItem("3000000");
+    }
+
+}
+
+void NewConnectionDialog::selectCarbus()
 {
     ui->lPort->setText("Serial Port:");
 
@@ -293,6 +348,9 @@ void NewConnectionDialog::setPortName(CANCon::type pType, QString pPortName, QSt
         case CANCon::LAWICEL:
             ui->rbLawicel->setChecked(true);
             break;
+        case CANCon::CARBUS:
+            ui->rbCarbus->setChecked(true);
+            break;
         case CANCon::CANSERVER:
           ui->rbCANserver->setChecked(true);
           break;
@@ -309,6 +367,13 @@ void NewConnectionDialog::setPortName(CANCon::type pType, QString pPortName, QSt
     {
         case CANCon::GVRET_SERIAL:
         case CANCon::LAWICEL:
+        {
+            int idx = ui->cbPort->findText(pPortName);
+            if( idx<0 ) idx=0;
+            ui->cbPort->setCurrentIndex(idx);
+            break;
+        }
+        case CANCon::CARBUS:
         {
             int idx = ui->cbPort->findText(pPortName);
             if( idx<0 ) idx=0;
@@ -361,6 +426,8 @@ QString NewConnectionDialog::getPortName()
     case CANCon::MQTT:
     case CANCon::LAWICEL:
         return ui->cbPort->currentText();
+    case CANCon::CARBUS:
+        return ui->cbPort->currentText();
     case CANCon::KAYAK:
         return ui->cbPort->currentText();
     case CANCon::CANSERVER:
@@ -380,6 +447,10 @@ QString NewConnectionDialog::getDriverName()
     {
         return ui->cbDeviceType->currentText();
     }
+    if (getConnectionType() == CANCon::CARBUS)
+    {
+        return ui->cbDeviceType->currentText();
+    }
     return "N/A";
 }
 
@@ -389,12 +460,20 @@ int NewConnectionDialog::getSerialSpeed()
     {
         return ui->cbSerialSpeed->currentText().toInt();
     }
+    if (getConnectionType() == CANCon::CARBUS)
+    {
+        return ui->cbSerialSpeed->currentText().toInt();
+    }
     else return 0;
 }
 
 int NewConnectionDialog::getBusSpeed()
 {
     if (getConnectionType() == CANCon::LAWICEL)
+    {
+        return ui->cbCANSpeed->currentText().toInt();
+    }
+    if (getConnectionType() == CANCon::CARBUS)
     {
         return ui->cbCANSpeed->currentText().toInt();
     }
@@ -409,6 +488,7 @@ CANCon::type NewConnectionDialog::getConnectionType()
     if (ui->rbKayak->isChecked()) return CANCon::KAYAK;
     if (ui->rbMQTT->isChecked()) return CANCon::MQTT;
     if (ui->rbLawicel->isChecked()) return CANCon::LAWICEL;
+    if (ui->rbCarbus->isChecked()) return CANCon::CARBUS;
     if (ui->rbCANserver->isChecked()) return CANCon::CANSERVER;
     if (ui->rbCanlogserver->isChecked()) return CANCon::CANLOGSERVER;
     qDebug() << "getConnectionType: error";
@@ -428,14 +508,22 @@ int NewConnectionDialog::getDataRate()
     {
         return ui->cbDataRate->currentText().toInt();
     }
+    if (getConnectionType() == CANCon::CARBUS)
+    {
+        return ui->cbDataRate->currentText().toInt();
+    }
     else return 0;
 }
 
 bool NewConnectionDialog::isCanFd()
  {
-     if (getConnectionType() == CANCon::LAWICEL)
-     {
-         return ui->cbCanFd;
-     }
-     else return 0;
+    if (getConnectionType() == CANCon::LAWICEL)
+    {
+        return ui->cbCanFd;
+    }
+    if (getConnectionType() == CANCon::CARBUS)
+    {
+        return ui->cbCanFd;
+    }
+    else return 0;
  }
