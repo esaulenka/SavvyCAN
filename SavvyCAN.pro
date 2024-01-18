@@ -10,7 +10,7 @@ CONFIG(release, debug|release):DEFINES += QT_NO_DEBUG_OUTPUT
 
 CONFIG+=sdk_no_version_check
 
-CONFIG += c++11
+CONFIG += c++17
 CONFIG += NO_UNIT_TESTS
 
 DEFINES += QCUSTOMPLOT_USE_OPENGL
