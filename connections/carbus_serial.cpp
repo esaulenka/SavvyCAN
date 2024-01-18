@@ -33,19 +33,11 @@ enum class CarBusDevice {
 
 
 CARBUSSerial::CARBUSSerial(QString portName, int serialSpeed, int busSpeed, bool canFd, int dataRate) :
-    CANConnection(portName, "CARBUS", CANCon::CARBUS, serialSpeed, busSpeed, canFd, dataRate, 3, 4000, true),
-    mCommDevice(mCommThread)
+    CANConnection(portName, "CARBUS", CANCon::CARBUS, serialSpeed, busSpeed, canFd, dataRate, 3, 4000, true)
 {
     sendDebug("CARBUSSerial()");
 
-    // connecting with mCommDevice
-    connect(&mCommDevice, &CARBUSconnection::sendDebug, this, &CARBUSSerial::sendDebug);
-    connect(&mCommDevice, &CARBUSconnection::gotResponse, this, &CARBUSSerial::deviceResponse);
-    connect(&mCommDevice, &CARBUSconnection::statusChanged, this, &CARBUSSerial::connectionChanged);
-    connect(this, &CARBUSSerial::connectDevice, &mCommDevice, &CARBUSconnection::connectDevice, Qt::BlockingQueuedConnection);
-    connect(this, &CARBUSSerial::disconnectDevice, &mCommDevice, &CARBUSconnection::disconnectDevice, Qt::BlockingQueuedConnection);
-    connect(this, &CARBUSSerial::sendCmdToDevice, &mCommDevice, &CARBUSconnection::sendCommand, Qt::BlockingQueuedConnection);
-
+    connect(this, &CARBUSSerial::gotResponse, this, &CARBUSSerial::deviceResponse);
 }
 
 
@@ -65,7 +57,117 @@ void CARBUSSerial::sendDebug(QString debugText)
 
 void CARBUSSerial::piStarted()
 {    
-    emit connectDevice(getPort());
+    QString portName = getPort();
+
+    if (serial)
+        piStop();
+
+    // open new device
+    sendDebug("Serial port: " + portName);
+
+    serial = new QSerialPort(QSerialPortInfo(portName));
+    if(!serial) {
+        sendDebug("can't open serial port " + portName);
+        return;
+    }
+    sendDebug("Created Serial Port Object");
+
+    // connect reading event
+    connect(serial, &QSerialPort::readyRead, this, &CARBUSSerial::readSerialData);
+    connect(serial, &QSerialPort::errorOccurred, this, &CARBUSSerial::serialError);
+
+    // configure
+    serial->setBaudRate(115200);    // exact speed doesn't matter
+    serial->setFlowControl(serial->NoFlowControl);
+    if (!serial->open(QIODevice::ReadWrite))
+    {
+        sendDebug("Error returned during port opening: " + serial->errorString());
+        return;
+    }
+    serial->setDataTerminalReady(true); //Seemingly these two lines used to be needed
+    serial->setRequestToSend(true);     //But, really both ends should automatically handle these
+
+
+    sendDebug("Connecting to CARBUS Device");
+
+    DeviceResponse resp;
+    // startup command:  a5 00 a5 00 -> 5a 00 5a 00
+    sequenceCnt = -1;   // some trick: will be incremented to 0
+    resp = sendCommand(0xA5, 0xA5, QByteArray{}, 1000);
+    if (!resp) {
+        sendDebug("Device not connected?");
+        return;
+    }
+
+    // Get device name
+    resp = sendCommand(0x01, 0x00, QByteArray{}, 100);
+    if (!resp) {
+        sendDebug("Invalid response?!");
+        return;
+    }
+    sendDebug("Found device: " % QString(resp.data));
+
+    // Get device type
+    resp = sendCommand(0x05, 0x00, QByteArray{}, 100);
+    if (!resp || resp.data.isEmpty()) {
+        sendDebug("Invalid response?!");
+        return;
+    }
+    int deviceType = resp.data[0];
+    sendDebug(QString("Device type: %1").arg(deviceType, 2, 16));
+
+    // Set device mode 'CAN only'
+    resp = sendCommand(0x04, 0x01, QByteArray{}, 100);
+    if (!resp) {
+        sendDebug("Invalid response?!");
+        return;
+    }
+
+    // Open device
+    resp = sendCommand(0x08, 0x00, QByteArray{}, 100);
+    if (!resp) {
+        sendDebug("Invalid response?!");
+        return;
+    }
+
+    CANConStatus conStatus {CANCon::CONNECTED, 1};
+    bool canFd = false;
+    switch (CarBusDevice(deviceType))
+    {
+    case CarBusDevice::HW_CH30:         // F105, 2 CAN + LIN
+    case CarBusDevice::HW_CH32:         // F105, 2 CAN + LIN
+    case CarBusDevice::HW_CHP:          // F105, 2 CAN + LIN
+    case CarBusDevice::HW_CH33:         // F407, 2 CAN + LIN
+    case CarBusDevice::HW_CHPM03:       // F407, 2 CAN + LIN
+        conStatus.numHardwareBuses = 2;
+        break;
+    case CarBusDevice::HW_ODB_OLD:      // F105, 1 CAN + LIN
+    case CarBusDevice::HW_ODB:          // F105, 1 CAN + LIN
+        conStatus.numHardwareBuses = 1;
+        break;
+    case CarBusDevice::HW_ODB_FD:       // G431, 1 FDCAN + LIN
+        conStatus.numHardwareBuses = 1;
+        canFd = true;
+        break;
+    case CarBusDevice::HW_FDL2:         // G473, 2 FDCAN + LIN
+        conStatus.numHardwareBuses = 1;
+        canFd = true;
+        break;
+    }
+
+    // Connected!
+    setStatus(CANCon::CONNECTED);
+    mNumBuses = conStatus.numHardwareBuses;
+    mBusData.resize(mNumBuses);
+    for (BusData & bus : mBusData)
+    {
+        bus.mConfigured = true;     // why this flag needed ?!
+        bus.mBus = CANBus();
+        bus.mBus.setCanFD(canFd);
+    }
+
+    emit status(conStatus);
+
 }
 
 
@@ -83,7 +185,23 @@ void CARBUSSerial::piSuspend(bool pSuspend)
 void CARBUSSerial::piStop()
 {
     qDebug() << "CARBUSSerial::piStop()";
-    emit disconnectDevice();
+
+    if (serial != nullptr)
+    {
+        if (serial->isOpen())
+        {
+            // TODO close connection on device side
+            serial->close();
+        }
+        serial->disconnect(); //disconnect all signals
+        delete serial;
+        serial = nullptr;
+    }
+
+    CANConStatus stats;
+    stats.conStatus = CANCon::NOT_CONNECTED;
+    stats.numHardwareBuses = 0;
+    emit status(stats);
 }
 
 
@@ -104,10 +222,10 @@ void CARBUSSerial::piSetBusSettings(int pBusIdx, CANBus bus)
     CANBus & config = mBusData[pBusIdx].mBus;
 
 
-    const uchar channel = (pBusIdx == 0) ? 0x20 : 0x40;
+    const uchar channel = (pBusIdx == 0) ? CARBUS_CH0 : CARBUS_CH1;
 
     // close channel
-    emit sendCmdToDevice(0x19, channel, {}, 100);
+    sendCommand(0x19, channel, {}, 100);
 
     // set speed
     QByteArray speed("\0", 1);
@@ -128,18 +246,18 @@ void CARBUSSerial::piSetBusSettings(int pBusIdx, CANBus bus)
     case 800000:    speed[0] = 12; break;
     case 1000000:   speed[0] = 13; break;
     }
-    emit sendCmdToDevice(0x11, channel | 0x00, speed, 100);
+    sendCommand(0x11, channel | 0x00, speed, 100);
 
     // set listen mode
     QByteArray listenMode("\0", 1);
     if (config.isListenOnly())
         listenMode[0] = 0x01;
-    emit sendCmdToDevice(0x11, channel | 0x09, listenMode, 100);
+    sendCommand(0x11, channel | 0x09, listenMode, 100);
 
     // TODO configure CAN-FD
 
     // open channel
-    emit sendCmdToDevice(0x18, channel, {}, 100);
+    sendCommand(0x18, channel, {}, 100);
 
     config.setActive(true);
 }
@@ -149,7 +267,7 @@ bool CARBUSSerial::piSendFrame(const CANFrame& frame)
 {
     qDebug() << "Sending out carbus frame with id " << frame.frameId() << " on bus " << frame.bus;
 
-    const uchar channel = (frame.bus == 0) ? 0x20 : 0x40;
+    const uchar channel = (frame.bus == 0) ? CARBUS_CH0 : CARBUS_CH1;
 
     PacketHeader pktHeader {};
 
@@ -161,33 +279,10 @@ bool CARBUSSerial::piSendFrame(const CANFrame& frame)
     pktHeader.dlc = Utility::bytes_to_dlc_code(frame.payload().size());
 
     QByteArray pktData((char*)&pktHeader, sizeof(pktHeader));
-    emit sendCmdToDevice(0x40, channel, pktData + frame.payload(), 0);
+    sendCommand(0x40, channel, pktData + frame.payload(), 0);
 
     return true;
 }
-
-
-
-/****************************************************************/
-
-
-void CARBUSSerial::connectionChanged(CANConStatus conStatus, bool canFdSupport)
-{
-    setStatus(conStatus.conStatus);
-    if (conStatus.conStatus == CANCon::CONNECTED)
-    {
-        mNumBuses = conStatus.numHardwareBuses;
-        mBusData.resize(mNumBuses);
-        for (BusData & bus : mBusData)
-        {
-            bus.mConfigured = true;     // why this flag needed ?!
-            bus.mBus = CANBus();
-            bus.mBus.setCanFD(canFdSupport);
-        }
-    }
-    emit status(conStatus);
-}
-
 
 
 //Debugging data sent from connection window. Inject it into Comm traffic.
@@ -199,7 +294,7 @@ void CARBUSSerial::debugInput(QByteArray bytes) {
 
 void CARBUSSerial::deviceResponse(uchar cmd, uchar channel, QByteArray cmdData)
 {
-    sendDebug(QString("Dev response: cmd=%1 channel=%2 data=%3").arg(cmd).arg(channel).arg(QString(cmdData.toHex())));
+    sendDebug(QString("Dev response: cmd=%1 channel=%2 data=%3").arg((int)cmd, 2, 16).arg((int)channel, 2, 16).arg(QString(cmdData.toHex())));
 
     if (cmd == 0x40)    // packet received
     {
@@ -230,7 +325,7 @@ void CARBUSSerial::deviceResponse(uchar cmd, uchar channel, QByteArray cmdData)
 
         // get frame from queue
         CANFrame* frame_p = getQueue().get();
-        if(frame_p)
+        if (frame_p)
         {
             // copy frame
             *frame_p = frame;
@@ -242,131 +337,7 @@ void CARBUSSerial::deviceResponse(uchar cmd, uchar channel, QByteArray cmdData)
 }
 
 
-
-/****************************************************************/
-
-void CARBUSconnection::connectDevice(QString portName)
-{
-    if(serial)
-        disconnectDevice();
-
-    // open new device
-    emit sendDebug("Serial port: " + portName);
-
-    serial = new QSerialPort(QSerialPortInfo(portName));
-    if(!serial) {
-        emit sendDebug("can't open serial port " + portName);
-        return;
-    }
-    emit sendDebug("Created Serial Port Object");
-
-    // connect reading event
-    connect(serial, &QSerialPort::readyRead, this, &CARBUSconnection::readSerialData);
-    connect(serial, &QSerialPort::errorOccurred, this, &CARBUSconnection::serialError);
-
-    // configure
-    serial->setBaudRate(115200);    // exact speed doesn't matter
-    serial->setFlowControl(serial->NoFlowControl);
-    if (!serial->open(QIODevice::ReadWrite))
-    {
-        emit sendDebug("Error returned during port opening: " + serial->errorString());
-        return;
-    }
-    serial->setDataTerminalReady(true); //Seemingly these two lines used to be needed
-    serial->setRequestToSend(true);     //But, really both ends should automatically handle these
-
-
-    emit sendDebug("Connecting to CARBUS Device");
-
-    DeviceResponse resp;
-    // startup command:  a5 00 a5 00 -> 5a 00 5a 00
-    sequenceCnt = -1;   // some trick: will be incremented to 0
-    resp = sendCommand(0xA5, 0xA5, QByteArray{}, 1000);
-    if (!resp) {
-        emit sendDebug("Device not connected?");
-        return;
-    }
-
-    // Get device name
-    resp = sendCommand(0x01, 0x00, QByteArray{}, 100);
-    if (!resp) {
-        emit sendDebug("Invalid response?!");
-        return;
-    }
-    emit sendDebug("Found device: " % QString(resp.data));
-
-    // Get device type
-    resp = sendCommand(0x05, 0x00, QByteArray{}, 100);
-    if (!resp || resp.data.isEmpty()) {
-        emit sendDebug("Invalid response?!");
-        return;
-    }
-    int deviceType = resp.data[0];
-    emit sendDebug(QString("Device type: %1").arg(deviceType, 2, 16));
-
-    // Set device mode 'CAN only'
-    resp = sendCommand(0x04, 0x01, QByteArray{}, 100);
-    if (!resp) {
-        emit sendDebug("Invalid response?!");
-        return;
-    }
-
-    // Open device
-    resp = sendCommand(0x08, 0x00, QByteArray{}, 100);
-    if (!resp) {
-        emit sendDebug("Invalid response?!");
-        return;
-    }
-
-    CANConStatus status {CANCon::CONNECTED, 1};
-    bool canFd = false;
-    switch (CarBusDevice(deviceType))
-    {
-    case CarBusDevice::HW_CH30:         // F105, 2 CAN + LIN
-    case CarBusDevice::HW_CH32:         // F105, 2 CAN + LIN
-    case CarBusDevice::HW_CHP:          // F105, 2 CAN + LIN
-    case CarBusDevice::HW_CH33:         // F407, 2 CAN + LIN
-    case CarBusDevice::HW_CHPM03:       // F407, 2 CAN + LIN
-        status.numHardwareBuses = 2;
-        break;
-    case CarBusDevice::HW_ODB_OLD:      // F105, 1 CAN + LIN
-    case CarBusDevice::HW_ODB:          // F105, 1 CAN + LIN
-        status.numHardwareBuses = 1;
-        break;
-    case CarBusDevice::HW_ODB_FD:       // G431, 1 FDCAN + LIN
-        status.numHardwareBuses = 1;
-        canFd = true;
-        break;
-    case CarBusDevice::HW_FDL2:         // G473, 2 FDCAN + LIN
-        status.numHardwareBuses = 1;
-        canFd = true;
-        break;
-    }
-    emit statusChanged(status, canFd);
-
-}
-
-void CARBUSconnection::disconnectDevice()
-{
-    if (serial != nullptr)
-    {
-        if (serial->isOpen())
-        {
-            // TODO close connection on device side
-            serial->close();
-        }
-        serial->disconnect(); //disconnect all signals
-        delete serial;
-        serial = nullptr;
-    }
-
-    CANConStatus stats;
-    stats.conStatus = CANCon::NOT_CONNECTED;
-    stats.numHardwareBuses = 0;
-    emit statusChanged(stats, false);
-}
-
-void CARBUSconnection::txCommand(uchar cmd, uchar channel, QByteArray cmdData)
+void CARBUSSerial::txCommand(uchar cmd, uchar channel, QByteArray cmdData)
 {
     sequenceCnt++;
 
@@ -384,20 +355,20 @@ void CARBUSconnection::txCommand(uchar cmd, uchar channel, QByteArray cmdData)
 
     if (!serial || !serial->isOpen())
     {
-        emit sendDebug("Error: Serial port closed");
+        sendDebug("Error: Serial port closed");
         return;
     }
 
-    emit sendDebug("Write to serial -> " + cmdBuf.toHex(' '));
+    sendDebug("Write to serial -> " + cmdBuf.toHex(' '));
 
     serial->write(cmdBuf);
 }
 
-void CARBUSconnection::readSerialData()
+void CARBUSSerial::readSerialData()
 {
     if (!serial || !serial->isOpen())
     {
-        emit sendDebug("Error: Serial port closed");
+        sendDebug("Error: Serial port closed");
         return;
     }
 
@@ -405,7 +376,7 @@ void CARBUSconnection::readSerialData()
 
     if (!rxBuf.isEmpty() && rxTimer.hasExpired(100))
     {
-        emit sendDebug("Inter-byte timeout during receive");
+        sendDebug("Inter-byte timeout during receive");
         rxBuf.clear();
     }
 
@@ -431,7 +402,7 @@ void CARBUSconnection::readSerialData()
 
         if (rxBuf.size() < (hdrLen + dataLen)) return;
 
-        emit sendDebug("Got from serial -> " + rxBuf.toHex(' '));
+        sendDebug("Got from serial -> " + rxBuf.toHex(' '));
 
         QByteArray rxData = rxBuf.mid(hdrLen, dataLen);
         emit gotResponse(cmd, channel, rxData);
@@ -441,7 +412,7 @@ void CARBUSconnection::readSerialData()
     }
 }
 
-CARBUSconnection::DeviceResponse CARBUSconnection::sendCommand(uchar cmd, uchar channel, QByteArray cmdData, uint timeout)
+CARBUSSerial::DeviceResponse CARBUSSerial::sendCommand(uchar cmd, uchar channel, QByteArray cmdData, uint timeout)
 {
     // do not wait for answer
     if (timeout == 0)
@@ -455,7 +426,7 @@ CARBUSconnection::DeviceResponse CARBUSconnection::sendCommand(uchar cmd, uchar 
 
     auto msgParser = [&](uchar rxCmd, uchar rxChannel, QByteArray rxData)
     {
-        emit sendDebug("sendCommand got resp=" + QString::number(cmd, 16));
+        sendDebug("sendCommand got resp=" + QString::number(cmd, 16));
         if (rxCmd == cmd ||
             rxCmd == 0x5A)  // special case, startup response
         {
@@ -465,7 +436,7 @@ CARBUSconnection::DeviceResponse CARBUSconnection::sendCommand(uchar cmd, uchar 
             loop.quit();
         }
     };
-    auto conn = connect(this, &CARBUSconnection::gotResponse, this, msgParser);
+    auto conn = connect(this, &CARBUSSerial::gotResponse, this, msgParser);
 
     QTimer::singleShot(timeout, &loop, &QEventLoop::quit);
     txCommand(cmd, channel, cmdData);
@@ -477,7 +448,7 @@ CARBUSconnection::DeviceResponse CARBUSconnection::sendCommand(uchar cmd, uchar 
 }
 
 
-void CARBUSconnection::serialError(QSerialPort::SerialPortError err)
+void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
 {
     QString errMessage;
     bool killConnection = false;
@@ -542,11 +513,11 @@ void CARBUSconnection::serialError(QSerialPort::SerialPortError err)
     }*/
     if (!errMessage.isEmpty())
     {
-        emit sendDebug(errMessage);
+        sendDebug(errMessage);
     }
     if (killConnection)
     {
         qDebug() << "Shooting the serial object in the head. It deserves it.";
-        disconnectDevice();
+        piStop();
     }
 }

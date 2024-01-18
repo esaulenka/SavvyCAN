@@ -7,49 +7,6 @@
 
 #include "canconnection.h"
 
-class CARBUSconnection : public QObject
-{
-    Q_OBJECT
-public:
-
-    CARBUSconnection(QThread &workingThread) {
-        moveToThread(&workingThread);
-        workingThread.start();
-    }
-
-    struct DeviceResponse {
-        uchar       cmd {};
-        uchar       channel {};
-        QByteArray  data;
-
-        operator bool() const
-        { return cmd != 0x00; }
-    };
-
-public slots:
-    void connectDevice(QString portName);
-    void disconnectDevice();
-    DeviceResponse sendCommand(uchar cmd, uchar channel, QByteArray cmdData, uint timeout);
-signals:
-    void sendDebug(QString dbg);
-    void gotResponse(uchar cmd, uchar channel, QByteArray cmdData);
-    void statusChanged(CANConStatus status, bool canFdSupport);
-
-private:
-    QSerialPort *serial {};
-private slots:
-    void readSerialData();
-    void serialError(QSerialPort::SerialPortError err);
-
-private:
-    uchar           sequenceCnt {};
-    QByteArray      rxBuf;
-    QElapsedTimer   rxTimer;
-
-    void txCommand(uchar cmd, uchar channel, QByteArray cmdData);
-
-};
-
 
 class CARBUSSerial : public CANConnection
 {
@@ -71,22 +28,39 @@ protected:
 public slots:
     void debugInput(QByteArray bytes);
 
-private slots:
-    void connectionChanged(CANConStatus conStatus, bool canFdSupport);
-    void deviceResponse(uchar cmd, uchar channel, QByteArray cmdData);
-    void sendDebug(QString debugText);
-signals:
-    void connectDevice(QString portName);
-    void disconnectDevice();
-    void sendCmdToDevice(uchar cmd, uchar channel, QByteArray cmdData, uint timeout);
-
 private:
+    void sendDebug(QString debugText);
 
-    QThread            mCommThread;
-    CARBUSconnection   mCommDevice;
+    // common communication part
+    QSerialPort *serial {};
+    Q_SLOT void serialError(QSerialPort::SerialPortError err);
 
+    // receiving part
+    uchar           sequenceCnt {};
+    QByteArray      rxBuf;
+    QElapsedTimer   rxTimer;
+    Q_SLOT void readSerialData();
+
+    Q_SIGNAL void gotResponse(uchar cmd, uchar channel, QByteArray cmdData);
+    Q_SLOT void deviceResponse(uchar cmd, uchar channel, QByteArray cmdData);
+
+    // sending part
+    void txCommand(uchar cmd, uchar channel, QByteArray cmdData);
+
+    struct DeviceResponse {
+        uchar       cmd {};
+        uchar       channel {};
+        QByteArray  data;
+
+        operator bool() const
+        { return cmd != 0x00; }
+    };
+    DeviceResponse sendCommand(uchar cmd, uchar channel, QByteArray cmdData, uint timeout);
+
+
+    // Some protocol details
     #pragma pack(push,1)
-    struct PacketHeader {
+    struct PacketHeader {   // frame header
         uint flags = 0;
         uint time = 0;      // used only for received messages
         uint crc = 0;       // to be used for LIN?
@@ -95,6 +69,12 @@ private:
     };
     static_assert(sizeof(PacketHeader)==18, "Invalid PacketHeader size");
     #pragma pack(pop)
+
+    enum : uchar {
+        CARBUS_CH0 = 0x20,  // CAN1 (or LIN for LIN-only configuration)
+        CARBUS_CH1 = 0x40,  // CAN2
+        CARBUS_CH2 = 0x60,  // LIN for 2CAN+Lin devices
+    };
 
 };
 
