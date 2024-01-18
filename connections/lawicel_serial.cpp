@@ -118,6 +118,8 @@ void LAWICELSerial::piSetBusSettings(int pBusIdx, CANBus bus)
         else can0ListenOnly = false;
     }
 */
+
+    // FIXME looks like a part of GVRET code
     if (pBusIdx < 2) {
         /* update baud rates */
         QByteArray buffer;
@@ -158,16 +160,16 @@ bool LAWICELSerial::piSendFrame(const CANFrame& frame)
         if (frame.hasExtendedFrameFormat())
         {
             if (frame.hasBitrateSwitch())
-                buildStr = QString::asprintf("B%08X%u", ID, LAWICELSerial::bytes_to_dlc_code(frame.payload().length()));
+                buildStr = QString::asprintf("B%08X%u", ID, Utility::bytes_to_dlc_code(frame.payload().length()));
             else
-                buildStr = QString::asprintf("D%08X%u", ID, LAWICELSerial::bytes_to_dlc_code(frame.payload().length()));
+                buildStr = QString::asprintf("D%08X%u", ID, Utility::bytes_to_dlc_code(frame.payload().length()));
         }
         else
         {
             if (frame.hasBitrateSwitch())
-                buildStr = QString::asprintf("b%03X%u", ID, LAWICELSerial::bytes_to_dlc_code(frame.payload().length()));
+                buildStr = QString::asprintf("b%03X%u", ID, Utility::bytes_to_dlc_code(frame.payload().length()));
             else
-                buildStr = QString::asprintf("d%03X%u", ID, LAWICELSerial::bytes_to_dlc_code(frame.payload().length()));
+                buildStr = QString::asprintf("d%03X%u", ID, Utility::bytes_to_dlc_code(frame.payload().length()));
         }
     }
     else {
@@ -558,7 +560,7 @@ void LAWICELSerial::readSerialData()
                 buildFrame.setFrameId(mBuildLine.mid(1, 3).toInt(nullptr, 16));
                 buildFrame.isReceived = true;
                 buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
-                buildData.resize(LAWICELSerial::dlc_code_to_bytes(mBuildLine.mid(4, 1).toInt(nullptr, 16)));
+                buildData.resize(Utility::dlc_code_to_bytes(mBuildLine.mid(4, 1).toInt(nullptr, 16)));
                 for (int c = 0; c < buildData.size(); c++)
                 {
                     buildData[c] = mBuildLine.mid(5 + (c*2), 2).toInt(nullptr, 16);
@@ -591,7 +593,7 @@ void LAWICELSerial::readSerialData()
                 buildFrame.isReceived = true;
                 buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
                 buildFrame.setExtendedFrameFormat(true);
-                buildData.resize(LAWICELSerial::dlc_code_to_bytes(mBuildLine.mid(4, 1).toInt(nullptr, 16)));
+                buildData.resize(Utility::dlc_code_to_bytes(mBuildLine.mid(4, 1).toInt(nullptr, 16)));
                 for (int c = 0; c < buildData.size(); c++)
                 {
                     buildData[c] = mBuildLine.mid(10 + (c*2), 2).toInt(nullptr, 16);
@@ -629,62 +631,6 @@ void LAWICELSerial::debugInput(QByteArray bytes) {
 void LAWICELSerial::handleTick()
 {
     //qDebug() << "Tick!";
-}
-
-
-// Convert a FDCAN_data_length_code to number of bytes in a message
-uint8_t LAWICELSerial::dlc_code_to_bytes(int dlc_code)
-{
-    if (dlc_code<=8)
-        return dlc_code;
-    else{
-        switch(dlc_code)
-        {
-            case 9:
-                return 12;
-            case 10:
-                return 16;
-            case 11:
-                return 20;
-            case 12:
-                return 24;
-            case 13:
-                return 32;
-            case 14:
-                return 48;
-            case 15:
-                return 64;
-            default:
-                return 0;
-        }
-    }
-}
-
-uint8_t LAWICELSerial::bytes_to_dlc_code(uint8_t bytes)
-{
-    if (bytes<=8)
-        return bytes;
-    else{
-        switch(bytes)
-        {
-            case 12:
-                return 9;
-            case 16:
-                return 10;
-            case 20:
-                return 11;
-            case 24:
-                return 12;
-            case 32:
-                return 13;
-            case 48:
-                return 14;
-            case 64:
-                return 15;
-            default:
-                return 0;
-        }
-    }
 }
 
 

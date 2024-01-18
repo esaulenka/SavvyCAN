@@ -344,6 +344,12 @@ public:
 
         return result;
     }
+
+    // Convert FD-CAN DLC field to the real data length, as described in the CAN-FD specification
+    static uint8_t dlc_code_to_bytes(int dlc_code);
+    // Convert FD-CAN data length to DLC field
+    static uint8_t bytes_to_dlc_code(uint8_t bytes);
+
 };
 
 #endif // UTILITY_H

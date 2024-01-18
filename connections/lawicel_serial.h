@@ -49,8 +49,6 @@ private:
     void rebuildLocalTimeBasis();
     void sendToSerial(const QByteArray &bytes);
     void sendDebug(const QString debugText);
-    uint8_t dlc_code_to_bytes(int dlc_code);
-    uint8_t bytes_to_dlc_code(uint8_t bytes);
 
 protected:
     QTimer             mTimer;
