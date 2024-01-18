@@ -36,11 +36,11 @@ public slots:
 
 private:
     Ui::NewConnectionDialog *ui;
-    QList<QSerialPortInfo> ports;
     QList<QCanBusDeviceInfo> canDevices;
     QVector<QString>* remoteDeviceIPGVRET;
     QVector<QString>* remoteBusKayak;
 
+    void hideParams();
     void selectSerial();
     void selectKvaser();
     void selectSocketCan();

@@ -71,7 +71,10 @@ QVariant CANConnectionModel::data(const QModelIndex &index, int role) const
 
     CANConnection *conn_p = getAtIdx(index.row());
 
-    if (!conn_p) return QVariant();
+    if (!conn_p) {
+        qDebug() << "Tried to get connection data but connection was nullptr";
+        return QVariant();
+    }
 
     //bool isSocketCAN = (conn_p->getType() == CANCon::SERIALBUS) ? true: false;
 
@@ -80,23 +83,22 @@ QVariant CANConnectionModel::data(const QModelIndex &index, int role) const
         switch (Column(index.column()))
         {
             case Column::Type:
-                if (conn_p)
-                    switch (conn_p->getType()) {
-                        case CANCon::KVASER: return "KVASER";
-                        case CANCon::SERIALBUS: return "SerialBus";
-                        case CANCon::GVRET_SERIAL: return "GVRET";
-                        case CANCon::KAYAK: return "socketcand";
-                        case CANCon::LAWICEL: return "LAWICEL";
-                        case CANCon::CARBUS: return "CARBUS";
-                        case CANCon::CANSERVER: return "CANserver";
-                        case CANCon::CANLOGSERVER: return "CanLogServer";
-                        default: {}
-                    }
-                else qDebug() << "Tried to show connection type but connection was nullptr";
+                switch (conn_p->getType()) {
+                    case CANCon::GVRET_SERIAL: return "GVRET";
+                    case CANCon::KVASER: return "KVASER";
+                    case CANCon::SERIALBUS: return "SerialBus";
+                    case CANCon::REMOTE: return "Remote";
+                    case CANCon::KAYAK: return "socketcand";
+                    case CANCon::MQTT: return "MQTT";
+                    case CANCon::LAWICEL: return "LAWICEL";
+                    case CANCon::CARBUS: return "CARBUS";
+                    case CANCon::CANSERVER: return "CANserver";
+                    case CANCon::CANLOGSERVER: return "CanLogServer";
+                    case CANCon::NONE: return "None";
+                }
                 break;
             case Column::Port:
-                if (conn_p) return conn_p->getPort();
-                else qDebug() << "Tried to show connection port but connection was nullptr";
+                return conn_p->getPort();
                 break;
             case Column::Subtype:
                 return conn_p->getDriver();

@@ -1,9 +1,8 @@
 #include <QDateTime>
 #include <QSettings>
-#include <QCoreApplication>
 
 #include "canconmanager.h"
-#include "canconfactory.h"
+
 
 CANConManager* CANConManager::mInstance = nullptr;
 
@@ -253,7 +252,6 @@ bool CANConManager::sendFrames(const QList<CANFrame>& pFrames)
 //the bus numbers if bus wasn't -1 so that they're local to the device
 bool CANConManager::addTargettedFrame(int pBusId, uint32_t ID, uint32_t mask, QObject *receiver)
 {
-    //int tempBusVal;
     int busBase = 0;
 
     foreach (CANConnection* conn, mConns)
@@ -272,7 +270,6 @@ bool CANConManager::addTargettedFrame(int pBusId, uint32_t ID, uint32_t mask, QO
 
 bool CANConManager::removeTargettedFrame(int pBusId, uint32_t ID, uint32_t mask, QObject *receiver)
 {
-    //int tempBusVal;
     int busBase = 0;
 
     foreach (CANConnection* conn, mConns)
