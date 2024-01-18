@@ -4,64 +4,68 @@
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QStringBuilder>
-#include <QtNetwork>
+#include <QEventLoop>
 
 #include "carbus_serial.h"
 #include "utility.h"
 
-CARBUSSerial::CARBUSSerial(QString portName, int serialSpeed, int carbusSpeed, bool canFd, int dataRate) :
-    CANConnection(portName, "CARBUS", CANCon::CARBUS,serialSpeed, carbusSpeed, canFd, dataRate, 3, 4000, true),
-    mTimer(this) /*NB: set this as parent of timer to manage it from working thread */
+
+enum class CarBusDevice {
+    /* Old identifier for CAN-Hacker on F105 mcu with dual CAN channels and single LIN channel */
+    HW_CH30 = 0xFF,
+    /* Old identifier for CAN-Hacker in ODB interface with single CAN channel and single LIN channel */
+    HW_ODB_OLD = 0x02,
+    /* CAN-Hacker 3.2 on F105 mcu with dual CAN channels and single LIN channel */
+    HW_CH32 = 0x01,
+    /* CAN-Hacker in ODB interface on F105 mcu with single CAN channel and single LIN channel */
+    HW_ODB = 0x04,
+    /* CAN-Hacker CH-P on F105 mcu with dual CAN channels and single LIN channel */
+    HW_CHP = 0x03,
+    /* CAN-Hacker 3.3 on F407 mcu with dual CAN channels and single LIN channel */
+    HW_CH33 = 0x11,
+    /* CAN-Hacker CH-P on F407 mcu with dual CAN channels and single LIN channel */
+    HW_CHPM03 = 0x13,
+    /* CAN-Hacker in ODB interface on G431 mcu with single CAN channel and single LIN channel */
+    HW_ODB_FD = 0x14,
+    /* CAN-Hacker CH-P on G473 mcu with dual CAN channels and single LIN channel */
+    HW_FDL2 = 0x06,
+};
+
+
+CARBUSSerial::CARBUSSerial(QString portName, int serialSpeed, int busSpeed, bool canFd, int dataRate) :
+    CANConnection(portName, "CARBUS", CANCon::CARBUS, serialSpeed, busSpeed, canFd, dataRate, 3, 4000, true),
+    mCommDevice(mCommThread)
 {
     sendDebug("CARBUSSerial()");
 
-    serial = nullptr;
-    isAutoRestart = false;
+    // connecting with mCommDevice
+    connect(&mCommDevice, &CARBUSconnection::sendDebug, this, &CARBUSSerial::sendDebug);
+    connect(&mCommDevice, &CARBUSconnection::gotResponse, this, &CARBUSSerial::deviceResponse);
+    connect(&mCommDevice, &CARBUSconnection::statusChanged, this, &CARBUSSerial::connectionChanged);
+    connect(this, &CARBUSSerial::connectDevice, &mCommDevice, &CARBUSconnection::connectDevice, Qt::BlockingQueuedConnection);
+    connect(this, &CARBUSSerial::disconnectDevice, &mCommDevice, &CARBUSconnection::disconnectDevice, Qt::BlockingQueuedConnection);
+    connect(this, &CARBUSSerial::sendCmdToDevice, &mCommDevice, &CARBUSconnection::sendCommand, Qt::BlockingQueuedConnection);
 
-    readSettings();
 }
 
 
 CARBUSSerial::~CARBUSSerial()
 {
+    sendDebug("~CARBUSSerial() start");
     stop();
-    sendDebug("~CARBUSSerial()");
+    sendDebug("~CARBUSSerial() end");
 }
 
-void CARBUSSerial::sendDebug(const QString debugText)
+void CARBUSSerial::sendDebug(QString debugText)
 {
     qDebug() << debugText;
-    debugOutput(debugText);
+    emit debugOutput(debugText);
 }
 
-void CARBUSSerial::sendToSerial(const QByteArray &bytes)
-{
-    if (serial == nullptr)
-    {
-        sendDebug("Attempt to write to serial port when it has not been initialized!");
-        return;
-    }
-
-    if (serial && !serial->isOpen())
-    {
-        sendDebug("Attempt to write to serial port when it is not open!");
-        return;
-    }
-
-    QString buildDebug;
-    buildDebug = "Write to serial -> ";
-    foreach (int byt, bytes) {
-        byt = (unsigned char)byt;
-        buildDebug = buildDebug % QString::number(byt, 16) % " ";
-    }
-    sendDebug(buildDebug);
-
-    if (serial) serial->write(bytes);
-}
 
 void CARBUSSerial::piStarted()
 {    
-    connectDevice();
+    emit connectDevice(getPort());
 }
 
 
@@ -78,8 +82,8 @@ void CARBUSSerial::piSuspend(bool pSuspend)
 
 void CARBUSSerial::piStop()
 {
-    mTimer.stop();
-    disconnectDevice();
+    qDebug() << "CARBUSSerial::piStop()";
+    emit disconnectDevice();
 }
 
 
@@ -91,110 +95,73 @@ bool CARBUSSerial::piGetBusSettings(int pBusIdx, CANBus& pBus)
 
 void CARBUSSerial::piSetBusSettings(int pBusIdx, CANBus bus)
 {
-    /* sanity checks */
     if( (pBusIdx < 0) || pBusIdx >= getNumBuses())
         return;
 
-    /* copy bus config */
+    // copy bus config
     setBusConfig(pBusIdx, bus);
-/*
-    qDebug() << "About to update bus " << pBusIdx << " on GVRET";
-    if (pBusIdx == 0)
+
+    CANBus & config = mBusData[pBusIdx].mBus;
+
+
+    const uchar channel = (pBusIdx == 0) ? 0x20 : 0x40;
+
+    // close channel
+    emit sendCmdToDevice(0x19, channel, {}, 100);
+
+    // set speed
+    QByteArray speed("\0", 1);
+    switch (config.getSpeed())
     {
-        can0Baud = bus.getSpeed();
-        can0Baud |= 0x80000000;
-        if (bus.isActive())
-        {
-            can0Baud |= 0x40000000;
-            can0Enabled = true;
-        }
-        else can0Enabled = false;
-
-        if (bus.isListenOnly())
-        {
-            can0Baud |= 0x20000000;
-            can0ListenOnly = true;
-        }
-        else can0ListenOnly = false;
+    case 10000:     speed[0] = 0; break;
+    case 20000:     speed[0] = 1; break;
+    case 33333:     speed[0] = 2; break;
+    case 50000:     speed[0] = 3; break;
+    case 62500:     speed[0] = 4; break;
+    case 83333:     speed[0] = 5; break;
+    case 92500:     speed[0] = 6; break;
+    case 100000:    speed[0] = 7; break;
+    case 125000:    speed[0] = 8; break;
+    case 250000:    speed[0] = 9; break;
+    case 400000:    speed[0] = 10; break;
+    case 500000:    speed[0] = 11; break;
+    case 800000:    speed[0] = 12; break;
+    case 1000000:   speed[0] = 13; break;
     }
-*/
-    if (pBusIdx < 2) {
-        /* update baud rates */
-        QByteArray buffer;
-        //sendDebug("Got signal to update bauds. 1: " + QString::number((can0Baud & 0xFFFFFFF)));
-        buffer[0] = (char)0xF1; //start of a command over serial
-        //sendToSerial(buffer);
-    }
+    emit sendCmdToDevice(0x11, channel | 0x00, speed, 100);
 
+    // set listen mode
+    QByteArray listenMode("\0", 1);
+    if (config.isListenOnly())
+        listenMode[0] = 0x01;
+    emit sendCmdToDevice(0x11, channel | 0x09, listenMode, 100);
+
+    // TODO configure CAN-FD
+
+    // open channel
+    emit sendCmdToDevice(0x18, channel, {}, 100);
+
+    config.setActive(true);
 }
 
 
 bool CARBUSSerial::piSendFrame(const CANFrame& frame)
 {
-    QByteArray buffer;
-    int c;
-    quint32 ID;
+    qDebug() << "Sending out carbus frame with id " << frame.frameId() << " on bus " << frame.bus;
 
-    //qDebug() << "Sending out carbus frame with id " << frame.ID << " on bus " << frame.bus;
+    const uchar channel = (frame.bus == 0) ? 0x20 : 0x40;
 
-    framesRapid++;
+    PacketHeader pktHeader {};
 
-    if (serial == nullptr) return false;
-    if (serial && !serial->isOpen()) return false;
-    //if (!isConnected) return false;
+    if (frame.hasExtendedFrameFormat()) pktHeader.flags |= 0x01;
+    // RTR bit - 0x02
+    if (frame.hasFlexibleDataRateFormat()) pktHeader.flags |= 0x04;
+    if (frame.hasBitrateSwitch()) pktHeader.flags |= 0x08;
 
-    // Doesn't make sense to send an error frame
-    // to an adapter
-    if (frame.frameId() & 0x20000000) {
-        return true;
-    }
+    pktHeader.dlc = Utility::bytes_to_dlc_code(frame.payload().size());
 
-    ID = frame.frameId();
-    if (frame.hasExtendedFrameFormat()) ID |= 1u << 31;
-
-    int idx = 0;
-    QString buildStr;
-    if(frame.hasFlexibleDataRateFormat()){
-        if (frame.hasExtendedFrameFormat())
-        {
-            if (frame.hasBitrateSwitch())
-                buildStr = QString::asprintf("B%08X%u", ID, CARBUSSerial::bytes_to_dlc_code(frame.payload().length()));
-            else
-                buildStr = QString::asprintf("D%08X%u", ID, CARBUSSerial::bytes_to_dlc_code(frame.payload().length()));
-        }
-        else
-        {
-            if (frame.hasBitrateSwitch())
-                buildStr = QString::asprintf("b%03X%u", ID, CARBUSSerial::bytes_to_dlc_code(frame.payload().length()));
-            else
-                buildStr = QString::asprintf("d%03X%u", ID, CARBUSSerial::bytes_to_dlc_code(frame.payload().length()));
-        }
-    }
-    else {
-        if (frame.hasExtendedFrameFormat())
-        {
-            buildStr = QString::asprintf("T%08X%u", ID, frame.payload().length());
-        }
-        else
-        {
-            buildStr = QString::asprintf("t%03X%u", ID, frame.payload().length());
-        }
-    }
-    foreach (QChar chr, buildStr)
-    {
-        buffer[idx] = chr.toLatin1();
-        idx++;
-    }
-
-    for (c = 0; c < frame.payload().length(); c++)
-    {
-        QString byt = Utility::formatByteAsHex(frame.payload()[c]);
-        buffer[idx + (c * 2)] = byt[0].toLatin1();
-        buffer[idx + (c * 2) + 1] = byt[1].toLatin1();
-    }
-    buffer[idx + (frame.payload().length() * 2)] = 13; //CR
-
-    sendToSerial(buffer);
+    QByteArray pktData((char*)&pktHeader, sizeof(pktHeader));
+    emit sendCmdToDevice(0x40, channel, pktData + frame.payload(), 0);
 
     return true;
 }
@@ -203,169 +170,314 @@ bool CARBUSSerial::piSendFrame(const CANFrame& frame)
 
 /****************************************************************/
 
-void CARBUSSerial::readSettings()
+
+void CARBUSSerial::connectionChanged(CANConStatus conStatus, bool canFdSupport)
 {
-    QSettings settings;
+    setStatus(conStatus.conStatus);
+    if (conStatus.conStatus == CANCon::CONNECTED)
+    {
+        mNumBuses = conStatus.numHardwareBuses;
+        mBusData.resize(mNumBuses);
+        for (BusData & bus : mBusData)
+        {
+            bus.mConfigured = true;     // why this flag needed ?!
+            bus.mBus = CANBus();
+            bus.mBus.setCanFD(canFdSupport);
+        }
+    }
+    emit status(conStatus);
 }
 
 
-void CARBUSSerial::connectDevice()
-{
-    QSettings settings;
 
-    /* disconnect device */
+//Debugging data sent from connection window. Inject it into Comm traffic.
+void CARBUSSerial::debugInput(QByteArray bytes) {
+    // sendToSerial(bytes);
+    Q_UNUSED(bytes);
+    sendDebug("Not implemented yet");
+}
+
+void CARBUSSerial::deviceResponse(uchar cmd, uchar channel, QByteArray cmdData)
+{
+    sendDebug(QString("Dev response: cmd=%1 channel=%2 data=%3").arg(cmd).arg(channel).arg(QString(cmdData.toHex())));
+
+    if (cmd == 0x40)    // packet received
+    {
+        if (isCapSuspended())   // don't capture packets
+            return;
+
+        CANFrame frame;
+
+        if (cmdData.size() < (int)sizeof(PacketHeader))
+        {
+            sendDebug("Received packet too short?!");
+            return;
+        }
+        auto *pktHeader = (const PacketHeader*)cmdData.constData();
+
+        frame.bus = (channel != 0x40) ? 0 : 1;
+        frame.setFrameId(pktHeader->msgId);
+
+        frame.setExtendedFrameFormat(pktHeader->flags & 0x01);
+        if (pktHeader->flags & 0x02)
+            frame.setFrameType(CANFrame::RemoteRequestFrame);
+        else if (pktHeader->flags & 0x01000000)
+            frame.setFrameType(CANFrame::ErrorFrame);
+        frame.setFlexibleDataRateFormat(pktHeader->flags & 0x04);
+        frame.setBitrateSwitch(pktHeader->flags & 0x08);
+
+        frame.setPayload(cmdData.mid(sizeof(PacketHeader)));
+
+        // get frame from queue
+        CANFrame* frame_p = getQueue().get();
+        if(frame_p)
+        {
+            // copy frame
+            *frame_p = frame;
+            checkTargettedFrame(frame);
+            // enqueue frame
+            getQueue().queue();
+        }
+    }
+}
+
+
+
+/****************************************************************/
+
+void CARBUSconnection::connectDevice(QString portName)
+{
     if(serial)
         disconnectDevice();
 
-    /* open new device */
+    // open new device
+    emit sendDebug("Serial port: " + portName);
 
-    qDebug() << "Serial port: " << getPort();
-
-    serial = new QSerialPort(QSerialPortInfo(getPort()));
+    serial = new QSerialPort(QSerialPortInfo(portName));
     if(!serial) {
-        sendDebug("can't open serial port " + getPort());
+        emit sendDebug("can't open serial port " + portName);
         return;
     }
-    sendDebug("Created Serial Port Object");
+    emit sendDebug("Created Serial Port Object");
 
-    /* connect reading event */
-    connect(serial, SIGNAL(readyRead()), this, SLOT(readSerialData()));
-    connect(serial, SIGNAL(error(QSerialPort::SerialPortError)), this, SLOT(serialError(QSerialPort::SerialPortError)));
+    // connect reading event
+    connect(serial, &QSerialPort::readyRead, this, &CARBUSconnection::readSerialData);
+    connect(serial, &QSerialPort::errorOccurred, this, &CARBUSconnection::serialError);
 
-    /* configure */
-    serial->setBaudRate(mSerialSpeed);
-    serial->setDataBits(serial->Data8);
-
-    serial->setFlowControl(serial->HardwareControl);
-    //serial->setFlowControl(serial->NoFlowControl);
+    // configure
+    serial->setBaudRate(115200);    // exact speed doesn't matter
+    serial->setFlowControl(serial->NoFlowControl);
     if (!serial->open(QIODevice::ReadWrite))
     {
-        //sendDebug("Error returned during port opening: " + serial->errorString());
+        emit sendDebug("Error returned during port opening: " + serial->errorString());
+        return;
     }
-    else
+    serial->setDataTerminalReady(true); //Seemingly these two lines used to be needed
+    serial->setRequestToSend(true);     //But, really both ends should automatically handle these
+
+
+    emit sendDebug("Connecting to CARBUS Device");
+
+    DeviceResponse resp;
+    // startup command:  a5 00 a5 00 -> 5a 00 5a 00
+    sequenceCnt = -1;   // some trick: will be incremented to 0
+    resp = sendCommand(0xA5, 0xA5, QByteArray{}, 1000);
+    if (!resp) {
+        emit sendDebug("Device not connected?");
+        return;
+    }
+
+    // Get device name
+    resp = sendCommand(0x01, 0x00, QByteArray{}, 100);
+    if (!resp) {
+        emit sendDebug("Invalid response?!");
+        return;
+    }
+    emit sendDebug("Found device: " % QString(resp.data));
+
+    // Get device type
+    resp = sendCommand(0x05, 0x00, QByteArray{}, 100);
+    if (!resp || resp.data.isEmpty()) {
+        emit sendDebug("Invalid response?!");
+        return;
+    }
+    int deviceType = resp.data[0];
+    emit sendDebug(QString("Device type: %1").arg(deviceType, 2, 16));
+
+    // Set device mode 'CAN only'
+    resp = sendCommand(0x04, 0x01, QByteArray{}, 100);
+    if (!resp) {
+        emit sendDebug("Invalid response?!");
+        return;
+    }
+
+    // Open device
+    resp = sendCommand(0x08, 0x00, QByteArray{}, 100);
+    if (!resp) {
+        emit sendDebug("Invalid response?!");
+        return;
+    }
+
+    CANConStatus status {CANCon::CONNECTED, 1};
+    bool canFd = false;
+    switch (CarBusDevice(deviceType))
     {
-        //serial->setDataTerminalReady(true); //Seemingly these two lines used to be needed
-        //serial->setRequestToSend(true);     //But, really both ends should automatically handle these
-        deviceConnected();
+    case CarBusDevice::HW_CH30:         // F105, 2 CAN + LIN
+    case CarBusDevice::HW_CH32:         // F105, 2 CAN + LIN
+    case CarBusDevice::HW_CHP:          // F105, 2 CAN + LIN
+    case CarBusDevice::HW_CH33:         // F407, 2 CAN + LIN
+    case CarBusDevice::HW_CHPM03:       // F407, 2 CAN + LIN
+        status.numHardwareBuses = 2;
+        break;
+    case CarBusDevice::HW_ODB_OLD:      // F105, 1 CAN + LIN
+    case CarBusDevice::HW_ODB:          // F105, 1 CAN + LIN
+        status.numHardwareBuses = 1;
+        break;
+    case CarBusDevice::HW_ODB_FD:       // G431, 1 FDCAN + LIN
+        status.numHardwareBuses = 1;
+        canFd = true;
+        break;
+    case CarBusDevice::HW_FDL2:         // G473, 2 FDCAN + LIN
+        status.numHardwareBuses = 1;
+        canFd = true;
+        break;
     }
+    emit statusChanged(status, canFd);
+
 }
 
-void CARBUSSerial::deviceConnected()
+void CARBUSconnection::disconnectDevice()
 {
-    sendDebug("Connecting to CARBUS Device!");
-
-    QByteArray output;
-
-    output.clear();
-    output.append('C'); //close the bus in case it was already up
-    output.append(13);
-    sendToSerial(output);
-
-    output.clear();
-    output.append('S'); //configure speed of bus
-        switch (this->mBusData[0].mBus.getSpeed())
-        {
-        case 10000:
-            output.append('0');
-            break;
-        case 20000:
-            output.append('1');
-            break;
-        case 50000:
-            output.append('2');
-            break;
-        case 100000:
-            output.append('3');
-            break;
-        case 125000:
-            output.append('4');
-            break;
-        case 250000:
-            output.append('5');
-            break;
-        case 500000:
-            output.append('6');
-            break;
-        case 800000:
-            output.append('7');
-            break;
-        case 1000000:
-            output.append('8');
-            break;
-        default:
-            output.append('6');
-            break;
-        }
-
-    output.append('\x0D');
-
-    sendToSerial(output);
-
-    output.clear();
-
-    if (this->canFd){
-        switch (this->dataRate)
-        {
-        case 1000000:
-            output.append("Y1");
-            break;
-        case 2000000:
-            output.append("Y2");
-            break;
-        case 4000000:
-            output.append("Y4");
-            break;
-        case 5000000:
-            output.append("Y5");
-            break;
-        default:
-            output.append("Y2");
-            break;
-        }
-
-        output.append('\x0D');
-        sendToSerial(output);
-        output.clear();
-    }
-
-    output.append('O'); //open bus now that we set the speed
-    output.append(13);
-
-    sendToSerial(output);
-
-    mNumBuses = 1;
-    setStatus(CANCon::CONNECTED);
-    CANConStatus stats;
-    stats.conStatus = getStatus();
-    stats.numHardwareBuses = mNumBuses;
-    mBusData[0].mConfigured = true;
-    mBusData[0].mBus.setActive(true);
-    //mBusData[0].mBus.setSpeed();
-    emit status(stats);
-}
-
-void CARBUSSerial::disconnectDevice() {
     if (serial != nullptr)
     {
         if (serial->isOpen())
         {
-            //serial->clear();
+            // TODO close connection on device side
             serial->close();
-
         }
         serial->disconnect(); //disconnect all signals
         delete serial;
         serial = nullptr;
     }
 
-    setStatus(CANCon::NOT_CONNECTED);
     CANConStatus stats;
-    stats.conStatus = getStatus();
-    stats.numHardwareBuses = mNumBuses;
-    emit status(stats);
+    stats.conStatus = CANCon::NOT_CONNECTED;
+    stats.numHardwareBuses = 0;
+    emit statusChanged(stats, false);
 }
 
-void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
+void CARBUSconnection::txCommand(uchar cmd, uchar channel, QByteArray cmdData)
+{
+    sequenceCnt++;
+
+    // normal request/response structure: <cmd> <sequence no>      <channel> <data length>      <data ...>
+    // packets send/receive structure:    <40>  <sequence no> <00> <channel> <data length> <00> <data ...>
+
+    QByteArray cmdBuf;
+    cmdBuf.append(cmd);
+    cmdBuf.append(sequenceCnt);
+    if (cmd == 0x40) cmdBuf.append('\0');
+    cmdBuf.append(channel);
+    cmdBuf.append(cmdData.size());
+    if (cmd == 0x40) cmdBuf.append(cmdData.size() / 256);
+    cmdBuf.append(cmdData);
+
+    if (!serial || !serial->isOpen())
+    {
+        emit sendDebug("Error: Serial port closed");
+        return;
+    }
+
+    emit sendDebug("Write to serial -> " + cmdBuf.toHex(' '));
+
+    serial->write(cmdBuf);
+}
+
+void CARBUSconnection::readSerialData()
+{
+    if (!serial || !serial->isOpen())
+    {
+        emit sendDebug("Error: Serial port closed");
+        return;
+    }
+
+    if (serial->bytesAvailable() == 0) return;
+
+    if (!rxBuf.isEmpty() && rxTimer.hasExpired(100))
+    {
+        emit sendDebug("Inter-byte timeout during receive");
+        rxBuf.clear();
+    }
+
+    rxTimer.start();
+    rxBuf.append(serial->readAll());
+
+    // try to parse
+    while (rxBuf.size() >= 4)
+    {
+        uchar cmd = rxBuf[0] & 0x7F;    // common response = (cmd | 0x80)
+        bool shortHeader = (cmd != 0x40);
+        uchar sequence = rxBuf[1];
+        uchar channel = rxBuf[2];
+        int hdrLen = shortHeader ? 4 : 6;
+
+        Q_UNUSED(sequence); // should be the same as in the command
+
+        // second check for the long header
+        if (rxBuf.size() < hdrLen) return;
+
+        int dataLen = shortHeader ? rxBuf[3] : (rxBuf[4] | (rxBuf[5] << 8));
+
+
+        if (rxBuf.size() < (hdrLen + dataLen)) return;
+
+        emit sendDebug("Got from serial -> " + rxBuf.toHex(' '));
+
+        QByteArray rxData = rxBuf.mid(hdrLen, dataLen);
+        emit gotResponse(cmd, channel, rxData);
+
+        // throw read data
+        rxBuf = rxBuf.mid(hdrLen + dataLen);
+    }
+}
+
+CARBUSconnection::DeviceResponse CARBUSconnection::sendCommand(uchar cmd, uchar channel, QByteArray cmdData, uint timeout)
+{
+    // do not wait for answer
+    if (timeout == 0)
+    {
+        txCommand(cmd, channel, cmdData);
+        return {};
+    }
+
+    DeviceResponse resp;
+    QEventLoop loop;
+
+    auto msgParser = [&](uchar rxCmd, uchar rxChannel, QByteArray rxData)
+    {
+        emit sendDebug("sendCommand got resp=" + QString::number(cmd, 16));
+        if (rxCmd == cmd ||
+            rxCmd == 0x5A)  // special case, startup response
+        {
+            resp.cmd = rxCmd;
+            resp.channel = rxChannel;
+            resp.data = rxData;
+            loop.quit();
+        }
+    };
+    auto conn = connect(this, &CARBUSconnection::gotResponse, this, msgParser);
+
+    QTimer::singleShot(timeout, &loop, &QEventLoop::quit);
+    txCommand(cmd, channel, cmdData);
+
+    loop.exec();
+    disconnect(conn);
+
+    return resp;
+}
+
+
+void CARBUSconnection::serialError(QSerialPort::SerialPortError err)
 {
     QString errMessage;
     bool killConnection = false;
@@ -376,17 +488,14 @@ void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
     case QSerialPort::DeviceNotFoundError:
         errMessage = "Device not found error on serial";
         killConnection = true;
-        piStop();
         break;
     case QSerialPort::PermissionError:
         errMessage =  "Permission error on serial port";
         killConnection = true;
-        piStop();
         break;
     case QSerialPort::OpenError:
         errMessage =  "Open error on serial port";
         killConnection = true;
-        piStop();
         break;
     case QSerialPort::ParityError:
         errMessage = "Parity error on serial port";
@@ -399,16 +508,13 @@ void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
         break;
     case QSerialPort::WriteError:
         errMessage = "Write error on serial port";
-        piStop();
         break;
     case QSerialPort::ReadError:
         errMessage = "Read error on serial port";
-        piStop();
         break;
     case QSerialPort::ResourceError:
         errMessage = "Serial port seems to have disappeared.";
         killConnection = true;
-        piStop();
         break;
     case QSerialPort::UnsupportedOperationError:
         errMessage = "Unsupported operation on serial port";
@@ -417,7 +523,6 @@ void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
     case QSerialPort::UnknownError:
         errMessage = "Beats me what happened to the serial port.";
         killConnection = true;
-        piStop();
         break;
     case QSerialPort::TimeoutError:
         errMessage = "Timeout error on serial port";
@@ -426,7 +531,6 @@ void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
     case QSerialPort::NotOpenError:
         errMessage = "The serial port isn't open";
         killConnection = true;
-        piStop();
         break;
     }
     /*
@@ -436,9 +540,9 @@ void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
         serial->flush();
         serial->close();
     }*/
-    if (errMessage.length() > 1)
+    if (!errMessage.isEmpty())
     {
-        sendDebug(errMessage);
+        emit sendDebug(errMessage);
     }
     if (killConnection)
     {
@@ -446,243 +550,3 @@ void CARBUSSerial::serialError(QSerialPort::SerialPortError err)
         disconnectDevice();
     }
 }
-
-
-void CARBUSSerial::connectionTimeout()
-{
-    //one second after trying to connect are we actually connected?
-    if (CANCon::NOT_CONNECTED==getStatus()) //no?
-    {
-        //then emit the the failure signal and see if anyone cares
-        sendDebug("Failed to connect to CARBUS at that com port");
-
-        disconnectDevice();
-        connectDevice();
-    }
-    else
-    {
-        /* start timer */
-        connect(&mTimer, SIGNAL(timeout()), this, SLOT(handleTick()));
-        mTimer.setInterval(250); //tick four times per second
-        mTimer.setSingleShot(false); //keep ticking
-        mTimer.start();
-    }
-}
-
-void CARBUSSerial::readSerialData()
-{
-    QByteArray data;
-    unsigned char c;
-    QString debugBuild;
-    CANFrame buildFrame;
-    QByteArray buildData;
-
-    if (serial) data = serial->readAll();
-
-    sendDebug("Got data from serial. Len = " % QString::number(data.length()));
-    for (int i = 0; i < data.length(); i++)
-    {
-        c = data.at(i);
-        //qDebug() << c << "    " << QString::number(c, 16) << "     " << QString(c);
-        debugBuild = debugBuild % QString::number(c, 16).rightJustified(2,'0') % " ";
-        //procRXChar(c);
-        mBuildLine.append(c);
-        if (c == 13) //all lawicel commands end in CR
-        {
-            qDebug() << "Got CR!";
-
-            buildFrame.setTimeStamp(QDateTime::currentMSecsSinceEpoch() * 1000l);
-            switch (mBuildLine[0].toLatin1())
-            {
-            case 't': //standard frame
-                //tIIILDD
-                buildFrame.setFrameId(mBuildLine.mid(1, 3).toInt(nullptr, 16));
-                buildFrame.isReceived = true;
-                buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
-                buildData.resize(mBuildLine.mid(4, 1).toInt());
-                for (int c = 0; c < buildData.size(); c++)
-                {
-                    buildData[c] = mBuildLine.mid(5 + (c*2), 2).toInt(nullptr, 16);
-                }
-                buildFrame.setPayload(buildData);
-                if (!isCapSuspended())
-                {
-                    /* get frame from queue */
-                    CANFrame* frame_p = getQueue().get();
-                    if(frame_p) {
-                        //qDebug() << "Lawicel got frame on bus " << frame_p->bus;
-                        /* copy frame */
-                        *frame_p = buildFrame;
-                        checkTargettedFrame(buildFrame);
-                        /* enqueue frame */
-                        getQueue().queue();
-                    }
-                    else
-                        qDebug() << "can't get a frame, ERROR";
-                }
-                break;
-            case 'T': //extended frame
-                //TIIIIIIIILDD.
-                buildFrame.setFrameId(mBuildLine.mid(1, 8).toInt(nullptr, 16));
-                buildFrame.isReceived = true;
-                buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
-                buildFrame.setExtendedFrameFormat(true);
-                buildData.resize(mBuildLine.mid(9, 1).toInt());
-                for (int c = 0; c < buildData.size(); c++)
-                {
-                    buildData[c] = mBuildLine.mid(10 + (c*2), 2).toInt(nullptr, 16);
-                }
-                buildFrame.setPayload(buildData);
-                if (!isCapSuspended())
-                {
-                    /* get frame from queue */
-                    CANFrame* frame_p = getQueue().get();
-                    if(frame_p) {
-                        //qDebug() << "Lawicel got frame on bus " << frame_p->bus;
-                        /* copy frame */
-                        *frame_p = buildFrame;
-                        checkTargettedFrame(buildFrame);
-                        /* enqueue frame */
-                        getQueue().queue();
-                    }
-                    else
-                        qDebug() << "can't get a frame, ERROR";
-                }
-                break;
-            case 'b':
-                buildFrame.setBitrateSwitch(true); //BRS enabled
-            case 'd': //standard fd frame, BRS disabled
-                //tIIILDD
-                buildFrame.setFlexibleDataRateFormat(true);
-                buildFrame.setFrameId(mBuildLine.mid(1, 3).toInt(nullptr, 16));
-                buildFrame.isReceived = true;
-                buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
-                buildData.resize(CARBUSSerial::dlc_code_to_bytes(mBuildLine.mid(4, 1).toInt(nullptr, 16)));
-                for (int c = 0; c < buildData.size(); c++)
-                {
-                    buildData[c] = mBuildLine.mid(5 + (c*2), 2).toInt(nullptr, 16);
-                }
-                buildFrame.setPayload(buildData);
-                if (!isCapSuspended())
-                {
-                    /* get frame from queue */
-                    CANFrame* frame_p = getQueue().get();
-                    if(frame_p) {
-                        //qDebug() << "Lawicel got frame on bus " << frame_p->bus;
-                        /* copy frame */
-                        *frame_p = buildFrame;
-                        checkTargettedFrame(buildFrame);
-                        /* enqueue frame */
-                        getQueue().queue();
-                    }
-                    else
-                        qDebug() << "can't get a frame, ERROR";
-                }
-                break;
-            case 'B':
-                buildFrame.setBitrateSwitch(true); //BRS enabled
-            case 'D': //extended fd frame
-                //TIIIIIIIILDD.
-                buildFrame.setFlexibleDataRateFormat(true);
-                buildFrame.setBitrateSwitch(true);
-                buildFrame.setFrameId(mBuildLine.mid(1, 8).toInt(nullptr, 16));
-                buildFrame.isReceived = true;
-                buildFrame.setFrameType(QCanBusFrame::FrameType::DataFrame);
-                buildFrame.setExtendedFrameFormat(true);
-                buildData.resize(CARBUSSerial::dlc_code_to_bytes(mBuildLine.mid(4, 1).toInt(nullptr, 16)));
-                for (int c = 0; c < buildData.size(); c++)
-                {
-                    buildData[c] = mBuildLine.mid(10 + (c*2), 2).toInt(nullptr, 16);
-                }
-                buildFrame.setPayload(buildData);
-                if (!isCapSuspended())
-                {
-                    /* get frame from queue */
-                    CANFrame* frame_p = getQueue().get();
-                    if(frame_p) {
-                        //qDebug() << "Lawicel got frame on bus " << frame_p->bus;
-                        /* copy frame */
-                        *frame_p = buildFrame;
-                        checkTargettedFrame(buildFrame);
-                        /* enqueue frame */
-                        getQueue().queue();
-                    }
-                    else
-                        qDebug() << "can't get a frame, ERROR";
-                }
-                break;
-            }
-            mBuildLine.clear();
-        }
-    }
-    debugOutput(debugBuild);
-    //qDebug() << debugBuild;
-}
-
-//Debugging data sent from connection window. Inject it into Comm traffic.
-void CARBUSSerial::debugInput(QByteArray bytes) {
-   sendToSerial(bytes);
-}
-
-void CARBUSSerial::handleTick()
-{
-    //qDebug() << "Tick!";
-}
-
-
-// Convert a FDCAN_data_length_code to number of bytes in a message
-uint8_t CARBUSSerial::dlc_code_to_bytes(int dlc_code)
-{
-    if (dlc_code<=8)
-        return dlc_code;
-    else{
-        switch(dlc_code)
-        {
-            case 9:
-                return 12;
-            case 10:
-                return 16;
-            case 11:
-                return 20;
-            case 12:
-                return 24;
-            case 13:
-                return 32;
-            case 14:
-                return 48;
-            case 15:
-                return 64;
-            default:
-                return 0;
-        }
-    }
-}
-
-uint8_t CARBUSSerial::bytes_to_dlc_code(uint8_t bytes)
-{
-    if (bytes<=8)
-        return bytes;
-    else{
-        switch(bytes)
-        {
-            case 12:
-                return 9;
-            case 16:
-                return 10;
-            case 20:
-                return 11;
-            case 24:
-                return 12;
-            case 32:
-                return 13;
-            case 48:
-                return 14;
-            case 64:
-                return 15;
-            default:
-                return 0;
-        }
-    }
-}
-
-
