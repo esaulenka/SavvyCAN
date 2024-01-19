@@ -5,7 +5,6 @@
 #include <QStringBuilder>
 #include <QtNetwork>
 
-#include "utility.h"
 #include "mqtt_bus.h"
 
 MQTT_BUS::MQTT_BUS(QString topicName) :
@@ -37,7 +36,7 @@ MQTT_BUS::~MQTT_BUS()
 void MQTT_BUS::sendDebug(const QString debugText)
 {
     qDebug() << debugText;
-    debugOutput(debugText);
+    emit debugOutput(debugText);
 }
 
 void MQTT_BUS::piStarted()
@@ -227,10 +226,6 @@ void MQTT_BUS::piSetBusSettings(int pBusIdx, CANBus bus)
 
 bool MQTT_BUS::piSendFrame(const CANFrame& frame)
 {
-    QByteArray buffer;
-    //int c;
-    //quint32 ID;
-
     //qDebug() << "Sending out GVRET frame with id " << frame.ID << " on bus " << frame.bus;
 
     framesRapid++;

@@ -4,7 +4,6 @@
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QStringBuilder>
-#include <QtNetwork>
 
 #include "lawicel_serial.h"
 #include "utility.h"
@@ -31,7 +30,7 @@ LAWICELSerial::~LAWICELSerial()
 void LAWICELSerial::sendDebug(const QString debugText)
 {
     qDebug() << debugText;
-    debugOutput(debugText);
+    emit debugOutput(debugText);
 }
 
 void LAWICELSerial::sendToSerial(const QByteArray &bytes)
@@ -48,13 +47,7 @@ void LAWICELSerial::sendToSerial(const QByteArray &bytes)
         return;
     }
 
-    QString buildDebug;
-    buildDebug = "Write to serial -> ";
-    foreach (int byt, bytes) {
-        byt = (unsigned char)byt;
-        buildDebug = buildDebug % QString::number(byt, 16) % " ";
-    }
-    sendDebug(buildDebug);
+    sendDebug("Write to serial -> " + bytes.toHex(' '));
 
     if (serial) serial->write(bytes);
 }
@@ -474,25 +467,23 @@ void LAWICELSerial::connectionTimeout()
 void LAWICELSerial::readSerialData()
 {
     QByteArray data;
-    unsigned char c;
-    QString debugBuild;
-    CANFrame buildFrame;
-    QByteArray buildData;
 
     if (serial) data = serial->readAll();
 
     sendDebug("Got data from serial. Len = " % QString::number(data.length()));
+    sendDebug(data.toHex(' '));
+
     for (int i = 0; i < data.length(); i++)
     {
-        c = data.at(i);
-        //qDebug() << c << "    " << QString::number(c, 16) << "     " << QString(c);
-        debugBuild = debugBuild % QString::number(c, 16).rightJustified(2,'0') % " ";
-        //procRXChar(c);
+        unsigned char c = data.at(i);
+
         mBuildLine.append(c);
         if (c == 13) //all lawicel commands end in CR
         {
-            qDebug() << "Got CR!";
+            //qDebug() << "Got CR!";
 
+            CANFrame buildFrame;
+            QByteArray buildData;
             buildFrame.setTimeStamp(QDateTime::currentMSecsSinceEpoch() * 1000l);
             switch (mBuildLine[0].toLatin1())
             {
@@ -619,8 +610,6 @@ void LAWICELSerial::readSerialData()
             mBuildLine.clear();
         }
     }
-    debugOutput(debugBuild);
-    //qDebug() << debugBuild;
 }
 
 //Debugging data sent from connection window. Inject it into Comm traffic.

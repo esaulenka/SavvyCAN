@@ -5,14 +5,9 @@
 #include <QCanBusDevice>
 #include <QThread>
 #include <QTimer>
-
-/*************/
 #include <QDateTime>
-/*************/
-
-#include "canframemodel.h"
 #include "canconnection.h"
-#include "canconmanager.h"
+
 
 class LAWICELSerial : public CANConnection
 {
@@ -29,7 +24,7 @@ protected:
     virtual void piSetBusSettings(int pBusIdx, CANBus pBus);
     virtual bool piGetBusSettings(int pBusIdx, CANBus& pBus);
     virtual void piSuspend(bool pSuspend);
-    virtual bool piSendFrame(const CANFrame&) ;
+    virtual bool piSendFrame(const CANFrame& frame);
 
     void disconnectDevice();
 
@@ -58,7 +53,7 @@ protected:
     bool isAutoRestart;
     QSerialPort *serial;
     int framesRapid;
-    CANFrame buildFrame;
+
     bool can0Enabled;
     bool can0ListenOnly;
     bool canFd;

@@ -47,7 +47,7 @@ SocketCANd::~SocketCANd()
 void SocketCANd::sendDebug(const QString debugText)
 {
     qDebug() << debugText;
-    debugOutput(debugText);
+    emit debugOutput(debugText);
 }
 
 void SocketCANd::sendBytesToTCP(const QByteArray &bytes, int busNum)
@@ -58,13 +58,7 @@ void SocketCANd::sendBytesToTCP(const QByteArray &bytes, int busNum)
         return;
     }
 
-    QString buildDebug;
-    buildDebug = "Send data to " + hostIP.toString() + ":" + QString::number(hostPort) + " -> ";
-    foreach (int byt, bytes) {
-        byt = (unsigned char)byt;
-        buildDebug = buildDebug % QString::number(byt, 16) % " ";
-    }
-    //sendDebug(buildDebug);
+    //sendDebug("Send data to " + hostIP.toString() + ":" + QString::number(hostPort) + " -> " + bytes.toHex(' '));
 
     if (tcpClient[busNum]) tcpClient[busNum]->write(bytes);
 }
@@ -77,10 +71,7 @@ void SocketCANd::sendStringToTCP(const char* data, int busNum)
         return;
     }
 
-    //QString buildDebug;
-    //buildDebug = "Send data to " + hostIP.toString() + ":" + QString::number(hostPort) + " -> " + data;
-    //sendDebug(buildDebug);
-    //qInfo() << buildDebug;
+    //sendDebug("Send data to " + hostIP.toString() + ":" + QString::number(hostPort) + " -> " + data);
 
     if (tcpClient[busNum]) tcpClient[busNum]->write(data);
 }
@@ -124,10 +115,6 @@ void SocketCANd::piSetBusSettings(int pBusIdx, CANBus bus)
 
 bool SocketCANd::piSendFrame(const CANFrame& frame)
 {
-    QByteArray buffer;
-    int c;
-    int ID;
-
 //    //calculate bus number offset (in case of multiple connections)
 //    //useless since SavvyCAN already delivers the right index in frame.bus
 //    QList<CANConnection*> connList = CANConManager::getInstance()->getConnections();
@@ -151,11 +138,11 @@ bool SocketCANd::piSendFrame(const CANFrame& frame)
     if (frame.frameId() & 0x20000000) {
         return true;
     }
-    ID = frame.frameId();
+    int ID = frame.frameId();
     if (frame.hasExtendedFrameFormat()) ID |= 1 << 31;
 
     QString sendStr = "< send " + QString::number(ID, 16) + " " + QString::number(frame.payload().length()) + " ";
-    for (c = 0; c < frame.payload().length(); c++)
+    for (int c = 0; c < frame.payload().length(); c++)
     {
        sendStr.append(QString::number(frame.payload()[c], 16) + " ");
     }

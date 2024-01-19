@@ -41,7 +41,7 @@ GVRetSerial::~GVRetSerial()
 void GVRetSerial::sendDebug(const QString debugText)
 {
     qDebug() << debugText;
-    debugOutput(debugText);
+    emit debugOutput(debugText);
 }
 
 void GVRetSerial::sendToSerial(const QByteArray &bytes)
@@ -70,13 +70,7 @@ void GVRetSerial::sendToSerial(const QByteArray &bytes)
         return;
     }
 
-    QString buildDebug;
-    buildDebug = "Write to serial -> ";
-    foreach (int byt, bytes) {
-        byt = (unsigned char)byt;
-        buildDebug = buildDebug % QString::number(byt, 16) % " ";
-    }
-    sendDebug(buildDebug);
+    sendDebug("Write to serial -> " + bytes.toHex(' '));
 
     if (serial) serial->write(bytes);
     if (tcpClient) tcpClient->write(bytes);
@@ -317,8 +311,7 @@ void GVRetSerial::connectDevice()
         udpClient->connectToHost(getPort(), 17222);
         connect(udpClient, SIGNAL(readyRead()), this, SLOT(readSerialData()));
         //connect(udpClient, SIGNAL(connected()), this, SLOT(tcpConnected()));
-        debugOutput("Created UDP Socket");
-        tcpConnected();
+        sendDebug("Created UDP Socket");
         */
     }
     else {
@@ -589,8 +582,7 @@ void GVRetSerial::readSerialData()
         debugBuild = debugBuild % QString::number(c, 16).rightJustified(2,'0') % " ";
         procRXChar(c);
     }
-    debugOutput(debugBuild);
-    //qDebug() << debugBuild;
+    sendDebug(debugBuild);
 }
 
 //Debugging data sent from connection window. Inject it into Comm traffic.
@@ -950,6 +942,7 @@ void GVRetSerial::procRXChar(unsigned char c)
             if (can1ListenOnly) can1Status += 4;
             //emit busStatus(busBase, can0Baud & 0xFFFFF, can0Status);
             //emit busStatus(busBase + 1, can1Baud & 0xFFFFF, can1Status);
+            Q_UNUSED(can0Status); Q_UNUSED(can1Status);
             break;
         }
         rx_step++;
