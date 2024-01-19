@@ -5,11 +5,6 @@
 #include <QDebug>
 
 
-/* macros */
-#define IS_EMPTY()  (  mWIdx.loadAcquire()             == mRIdx.loadAcquire() )
-#define IS_FULL()   ( (mWIdx.loadAcquire()+1)%mSize    == mRIdx.loadAcquire() )
-
-
 template<class T>
 class LFQueue
 {
@@ -86,6 +81,9 @@ private:
 
     QAtomicInt mRIdx;
     QAtomicInt mWIdx;
+
+    inline bool IS_EMPTY() const { return  mWIdx.loadAcquire()          == mRIdx.loadAcquire(); }
+    inline bool IS_FULL()  const { return (mWIdx.loadAcquire()+1)%mSize == mRIdx.loadAcquire(); }
 };
 
 #endif // LFQUEUE_H
