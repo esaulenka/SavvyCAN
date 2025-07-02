@@ -17,7 +17,7 @@
    <item>
     <widget class="QSplitter" name="splitter">
      <property name="orientation">
-      <enum>Qt::Horizontal</enum>
+      <enum>Qt::Orientation::Horizontal</enum>
      </property>
      <property name="handleWidth">
       <number>8</number>
@@ -72,8 +72,11 @@
            <item>
             <widget class="QTreeWidget" name="treeDetails">
              <property name="horizontalScrollBarPolicy">
-              <enum>Qt::ScrollBarAlwaysOn</enum>
+              <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOn</enum>
              </property>
+             <attribute name="headerVisible">
+              <bool>false</bool>
+             </attribute>
              <column>
               <property name="text">
                <string notr="true">1</string>
@@ -94,7 +97,7 @@
               <string>Interval Histogram</string>
              </property>
              <property name="alignment">
-              <set>Qt::AlignCenter</set>
+              <set>Qt::AlignmentFlag::AlignCenter</set>
              </property>
             </widget>
            </item>
@@ -131,7 +134,7 @@
           <string>Bytes Graph</string>
          </property>
          <property name="alignment">
-          <set>Qt::AlignCenter</set>
+          <set>Qt::AlignmentFlag::AlignCenter</set>
          </property>
         </widget>
        </item>

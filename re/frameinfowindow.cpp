@@ -6,6 +6,7 @@
 #include <vector>
 #include "filterutility.h"
 #include "qcpaxistickerhex.h"
+#include "bus_protocols/j1939_handler.h"
 
 const QColor FrameInfoWindow::byteGraphColors[64] = {
     Qt::blue, Qt::green,  Qt::black, Qt::red, //0 1 2 3
@@ -38,13 +39,19 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
 
     readSettings();
 
+    for (int i = 0; i < 8; i++)
+    {
+        bytePens[i].setColor(byteGraphColors[i]);
+        bytePens[i].setWidth(1);
+    }
+
     modelFrames = frames;
 
     // Using lambda expression to strip away the possible filter label before passing the ID to updateDetailsWindow
-    connect(ui->listFrameID, &QListWidget::currentTextChanged, 
+    connect(ui->listFrameID, &QListWidget::currentTextChanged, this,
         [this](QString itemText)
             {
-            FrameInfoWindow::updateDetailsWindow(FilterUtility::getId(itemText));
+            this->updateDetailsWindow(FilterUtility::getId(itemText));
             } );
 
     connect(MainWindow::getReference(), &MainWindow::framesUpdated, this, &FrameInfoWindow::updatedFrames);
@@ -53,7 +60,7 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
     ui->splitter->setStretchFactor(0, 1); //idx, stretch factor
     ui->splitter->setStretchFactor(1, 4); //goal is to make right hand side larger by default
 
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 8; i++)
     {
         graphByte[i] = new QCustomPlot();
         setupByteGraph(graphByte[i], i);
@@ -78,9 +85,7 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
 
     graphHistogram->xAxis->setRange(0, 63);
     graphHistogram->yAxis->setRange(0, 100);
-    QSharedPointer<QCPAxisTickerLog> graphHistoLogTicker(new QCPAxisTickerLog);
-    graphHistogram->yAxis->setTicker(graphHistoLogTicker);
-    //graphHistogram->yAxis2->setTicker(graphHistoLogTicker);
+    graphHistogram->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>::create());
     graphHistogram->yAxis->setNumberFormat("eb"); // e = exponential, b = beautiful decimal powers
     graphHistogram->yAxis->setNumberPrecision(0); //log ticker always picks powers of 10 so no need or use for precision
 
@@ -97,9 +102,7 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
 
     ui->timeHistogram->xAxis->setRange(0, numIntervalHistBars);
     ui->timeHistogram->yAxis->setRange(0, 100);
-    QSharedPointer<QCPAxisTickerLog> logTicker(new QCPAxisTickerLog);
-    ui->timeHistogram->yAxis->setTicker(logTicker);
-    //ui->timeHistogram->yAxis2->setTicker(logTicker);
+    ui->timeHistogram->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>::create());
     ui->timeHistogram->yAxis->setScaleType(QCPAxis::stLogarithmic);
     ui->timeHistogram->yAxis->setNumberFormat("eb"); // e = exponential, b = beautiful decimal powers
     ui->timeHistogram->yAxis->setNumberPrecision(0); //log ticker always picks powers of 10 so no need or use for precision
@@ -131,18 +134,18 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
 
     installEventFilter(this);
 
-    for (int i = 0; i < 8; i++)
-    {
-        bytePens[i].setColor(byteGraphColors[i]);
-        bytePens[i].setWidth(1);
-    }
-
     connect(graphHistogram, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(mousePress()));
     connect(graphHistogram, SIGNAL(mouseWheel(QWheelEvent*)), this, SLOT(mouseWheel()));
     connect(ui->timeHistogram, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(mousePress()));
     connect(ui->timeHistogram, SIGNAL(mouseWheel(QWheelEvent*)), this, SLOT(mouseWheel()));
 
     dbcHandler = DBCHandler::getReference();
+
+    refreshIDList();
+    if (ui->listFrameID->count() > 0)
+    {
+        updateDetailsWindow(FilterUtility::getId(ui->listFrameID->item(0)));
+    }
 }
 
 void FrameInfoWindow::setupByteGraph(QCustomPlot *plot, int num)
@@ -154,8 +157,7 @@ void FrameInfoWindow::setupByteGraph(QCustomPlot *plot, int num)
     plot->yAxis->setRange(0, 265);
     if (useHexTicker)
     {
-        QSharedPointer<QCPAxisTickerHex> hexTicker(new QCPAxisTickerHex);
-        plot->yAxis->setTicker(hexTicker);
+        plot->yAxis->setTicker(QSharedPointer<QCPAxisTickerHex>::create());
     }
     //plot->axisRect()->setupFullAxesBox();
 
@@ -244,17 +246,7 @@ void FrameInfoWindow::mouseDoubleClick()
     }
 }
 
-void FrameInfoWindow::showEvent(QShowEvent* event)
-{
-    QDialog::showEvent(event);
-    readSettings();
-    refreshIDList();
-    if (ui->listFrameID->count() > 0)
-    {
-        updateDetailsWindow(FilterUtility::getId(ui->listFrameID->item(0)));
-        ui->listFrameID->setCurrentRow(0);
-    }
-}
+
 
 bool FrameInfoWindow::eventFilter(QObject *obj, QEvent *event)
 {
@@ -283,7 +275,7 @@ void FrameInfoWindow::closeEvent(QCloseEvent *event)
 {
     Q_UNUSED(event)
     writeSettings();
-    emit rejected();
+    // emit rejected();
 }
 
 void FrameInfoWindow::readSettings()
@@ -380,44 +372,23 @@ void FrameInfoWindow::updatedFrames(int numFrames)
         }
         //default is to sort in ascending order
         ui->listFrameID->sortItems();
-        ui->lblUniqueID->setText(")" + QString::number(ui->listFrameID->count()) + tr(" unique ids)"));
+        ui->lblUniqueID->setText("(" + QString::number(ui->listFrameID->count()) + tr(" unique ids)"));
     }
 }
 
 void FrameInfoWindow::updateDetailsWindow(QString newID)
 {
-    int targettedID;
-    int minLen, maxLen, thisLen;
-    int64_t avgInterval;
-    int64_t minInterval;
-    int64_t maxInterval;
-    int64_t thisInterval;
-    int minData[8];
-    int maxData[8];
-    int dataHistogram[256][8];
-    int bitfieldHistogram[64];
     QVector<double> histGraphX, histGraphY;
     QVector<double> byteGraphX, byteGraphY[8];
     QVector<double> timeGraphX, timeGraphY;
-    QHash<QString, QHash<QString, int>> signalInstances;
-    double maxY = -1000.0;
-    uint8_t changedBits[8];
-    uint8_t referenceBits[8];
-    uint8_t heatVals[512];
-
-    //these two used by bitflip heatmap functionality
-    uint8_t refByte[8];
-    double bitFlipHeat[64];
-
-    QTreeWidgetItem *baseNode, *dataBase, *histBase, *tempItem;
 
     if (modelFrames->count() == 0) return;
 
-    targettedID = static_cast<int>(Utility::ParseStringToNum(newID));
+    const int targettedID = static_cast<int>(Utility::ParseStringToNum(newID));
 
     qDebug() << "Started update details window with id " << targettedID;
 
-    avgInterval = 0;
+    int64_t avgInterval = 0;
 
     if (targettedID > -1)
     {
@@ -431,14 +402,11 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
         if (frameCache.count() == 0) return; //nothing to do if there are no frames!
 
-        const unsigned char *data = reinterpret_cast<const unsigned char *>(frameCache.at(0).payload().constData());
-        int dataLen = frameCache.at(0).payload().length();
-
         ui->treeDetails->clear();
 
         if (frameCache.count() == 0) return;
 
-        baseNode = new QTreeWidgetItem();
+        QTreeWidgetItem *baseNode = new QTreeWidgetItem();
         baseNode->setText(0, QString("ID: ") + newID );
 
         if (frameCache[0].hasExtendedFrameFormat()) //if these frames seem to be extended then try for J1939 decoding
@@ -451,7 +419,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             jid.pf = (targettedID >> 16) & 0xFF;
             jid.ps = (targettedID >> 8) & 0xFF;
 
-            tempItem = new QTreeWidgetItem();
+            QTreeWidgetItem *tempItem = new QTreeWidgetItem();
             tempItem->setText(0, tr("J1939 decoding"));
             baseNode->addChild(tempItem);
 
@@ -503,34 +471,36 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
         }
 
-        tempItem = new QTreeWidgetItem();
+        QTreeWidgetItem *tempItem = new QTreeWidgetItem();
         tempItem->setText(0, tr("# of frames: ") + QString::number(frameCache.count(),10));
         baseNode->addChild(tempItem);
 
         //clear out all the counters and accumulators
-        minLen = 8;
-        maxLen = 0;
-        minInterval = 0x7FFFFFFF;
-        maxInterval = 0;
+        int minLen = 8;
+        int maxLen = 0;
+        int64_t minInterval = 0x7FFFFFFF;
+        int64_t maxInterval = 0;
+        int minData[8];
+        int maxData[8];
+        int dataHistogram[256][8] = {};
+        int bitfieldHistogram[64] = {};
         for (int i = 0; i < 8; i++)
         {
             minData[i] = 256;
             maxData[i] = -1;
-            for (int k = 0; k < 256; k++) dataHistogram[k][i] = 0;
         }
-        for (int j = 0; j < 64; j++)
-        {
-            bitfieldHistogram[j] = 0;
-            bitFlipHeat[j] = 0;
-        }
-        signalInstances.clear();
+        //these two used by bitflip heatmap functionality
+        uint8_t refByte[8];
+        double bitFlipHeat[64] = {};
 
-        data = reinterpret_cast<const unsigned char *>(frameCache.at(0).payload().constData());
-        dataLen = frameCache.at(0).payload().length();
+        uint8_t changedBits[8] = {};
+        uint8_t referenceBits[8];
+
+        const unsigned char *data = reinterpret_cast<const unsigned char *>(frameCache.at(0).payload().constData());
+        const int dataLen = frameCache.at(0).payload().length();
 
         for (int c = 0; c < dataLen; c++)
         {
-            changedBits[c] = 0;
             referenceBits[c] = data[c];
             refByte[c] = data[c];
             //qDebug() << referenceBits[c];
@@ -538,14 +508,15 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
         std::vector<int64_t> sortedIntervals;
         int64_t intervalSum = 0;
+        QHash<QString, QHash<QString, int>> signalInstances;
 
         DBC_MESSAGE *msg = dbcHandler->findMessageForFilter(targettedID, nullptr);
 
         //then find all data points
         for (int j = 0; j < frameCache.count(); j++)
         {
-            data = reinterpret_cast<const unsigned char *>(frameCache.at(j).payload().constData());
-            dataLen = frameCache.at(j).payload().length();
+            const unsigned char *data = reinterpret_cast<const unsigned char *>(frameCache.at(j).payload().constData());
+            const int dataLen = frameCache.at(j).payload().length();
 
             byteGraphX.append(j);
             for (int bytcnt = 0; bytcnt < dataLen; bytcnt++)
@@ -557,10 +528,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             {
                 //TODO - we try the interval whichever way doesn't go negative. But, we should probably sort the frame list before
                 //starting so that the intervals are all correct.
-                if (frameCache[j].timeStamp().microSeconds() > frameCache[j-1].timeStamp().microSeconds())
-                    thisInterval = (frameCache[j].timeStamp().microSeconds() - frameCache[j-1].timeStamp().microSeconds());
-                else
-                    thisInterval = (frameCache[j-1].timeStamp().microSeconds() - frameCache[j].timeStamp().microSeconds());
+                int64_t thisInterval = std::abs(frameCache[j].timeStamp().microSeconds() - frameCache[j-1].timeStamp().microSeconds());
 
                 sortedIntervals.push_back(thisInterval);
                 intervalSum += thisInterval;
@@ -568,7 +536,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
                 if (thisInterval < minInterval) minInterval = thisInterval;
                 avgInterval += thisInterval;
             }
-            thisLen = dataLen;
+            int thisLen = dataLen;
             if (thisLen > maxLen) maxLen = thisLen;
             if (thisLen < minLen) minLen = thisLen;
             for (int c = 0; c < thisLen; c++)
@@ -646,9 +614,9 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             uint64_t step = static_cast<unsigned int>(ceil((maxInterval - minInterval) / numIntervalHistBars));
             qDebug() << "Step: " << step << " minInt: " << minInterval << " maxInt: " << maxInterval;
             unsigned int index = 0;
-            int counter = 0;
             for(int l = 0; l <= numIntervalHistBars; l++) {
                 int64_t currentMax = maxInterval - ((numIntervalHistBars - l) * step);	// avoid missing the biggest value due to rounding errors
+                int counter = 0;
                 qDebug() << "CurrentMax: " << currentMax;
                 while(index < sortedIntervals.size()) {
                     if(sortedIntervals[index] <= currentMax) {
@@ -662,7 +630,6 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
                 timeGraphX.append(currentMax / 1000.0);
                 timeGraphY.append(counter);
                 if(counter > maxTimeCounter) maxTimeCounter = counter;
-                counter = 0;
             }
         }
 
@@ -703,13 +670,13 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         //display accumulated data for all the bytes in the message
         for (int c = 0; c < maxLen; c++)
         {
-            dataBase = new QTreeWidgetItem();
-            histBase = new QTreeWidgetItem();
+            QTreeWidgetItem *dataBase = new QTreeWidgetItem();
+            QTreeWidgetItem *histBase = new QTreeWidgetItem();
 
             dataBase->setText(0, tr("Data Byte ") + QString::number(c));
             baseNode->addChild(dataBase);
 
-            tempItem = new QTreeWidgetItem();
+            QTreeWidgetItem *tempItem = new QTreeWidgetItem();
             QString builder;
             builder = tr("Changed bits: 0x") + QString::number(changedBits[c], 16) + "  (" + Utility::formatByteAsBinary(changedBits[c]) + ")";
             tempItem->setText(0, builder);
@@ -725,18 +692,19 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             {
                 if (dataHistogram[d][c] > 0)
                 {
-                    tempItem = new QTreeWidgetItem();
+                    QTreeWidgetItem *tempItem = new QTreeWidgetItem();
                     tempItem->setText(0, QString::number(d) + "/0x" + QString::number(d, 16) +" (" + Utility::formatByteAsBinary(static_cast<uint8_t>(d)) +") -> " + QString::number(dataHistogram[d][c]));
                     histBase->addChild(tempItem);
                 }
             }
         }
 
-        dataBase = new QTreeWidgetItem();
+        QTreeWidgetItem *dataBase = new QTreeWidgetItem();
         dataBase->setText(0, tr("Bitfield Histogram"));
+        double maxY = -1000.0;
         for (int c = 0; c < 8 * maxLen; c++)
         {
-            tempItem = new QTreeWidgetItem();
+            QTreeWidgetItem *tempItem = new QTreeWidgetItem();
             tempItem->setText(0, QString::number(c) + " (Byte " + QString::number(c / 8) + " Bit "
                             + QString::number(c % 8) + ") : " + QString::number(bitfieldHistogram[c]));
 
@@ -750,10 +718,10 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         //heat map output
         dataBase = new QTreeWidgetItem();
         dataBase->setText(0, tr("Bitchange Heatmap"));
-        memset(heatVals, 0, 512); //always clear the array before populating it.
+        uint8_t heatVals[512] = {};
         for (int c = 0; c < 8 * maxLen; c++)
         {
-            tempItem = new QTreeWidgetItem();
+            QTreeWidgetItem *tempItem = new QTreeWidgetItem();
             tempItem->setText(0, QString::number(c) + " (Byte " + QString::number(c / 8) + " Bit "
                             + QString::number(c % 8) + ") : " + QString::number(bitFlipHeat[c] * 100.0, 'f', 2));
 
@@ -771,12 +739,12 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
         QHash<QString, QHash<QString, int>>::const_iterator it = signalInstances.constBegin();
         while (it != signalInstances.constEnd()) {
-            dataBase = new QTreeWidgetItem();
+            QTreeWidgetItem *dataBase = new QTreeWidgetItem();
             dataBase->setText(0, it.key());
             QHash<QString,int>::const_iterator itVal = signalInstances[it.key()].constBegin();
             while (itVal != signalInstances[it.key()].constEnd())
             {
-                tempItem = new QTreeWidgetItem();
+                QTreeWidgetItem *tempItem = new QTreeWidgetItem();
                 tempItem->setText(0, itVal.key() + ": " + QString::number(itVal.value()));
                 dataBase->addChild(tempItem);
                 ++itVal;
@@ -804,7 +772,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         for (int graphs = 0; graphs < 8; graphs++)
         {
             graphByte[graphs]->clearGraphs();
-            graphRef[graphs] = graphByte[graphs]->addGraph();
+            graphByte[graphs]->addGraph();
             graphByte[graphs]->graph()->setData(byteGraphX, byteGraphY[graphs]);
             graphByte[graphs]->graph()->setPen(bytePens[graphs]);
             graphByte[graphs]->xAxis->setRange(0, byteGraphX.count());
@@ -828,6 +796,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
     }
     else
     {
+        qDebug() << "Update details ID=" << targettedID;
     }
 
     QSettings settings;
@@ -839,11 +808,10 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
 void FrameInfoWindow::refreshIDList()
 {
-    int id;
     for (int i = 0; i < modelFrames->count(); i++)
     {
         CANFrame thisFrame = modelFrames->at(i);
-        id = (int)thisFrame.frameId();
+        int id = (int)thisFrame.frameId();
         if (!foundID.contains(id))
         {
             foundID.append(id);
@@ -857,13 +825,10 @@ void FrameInfoWindow::refreshIDList()
 
 void FrameInfoWindow::saveDetails()
 {
-    QString filename;
     QFileDialog dialog(this);
     QSettings settings;
 
-    QStringList filters;
-    filters.append(QString(tr("Text File (*.txt)")));
-
+    QStringList filters( { tr("Text File (*.txt)"), } );
     dialog.setFileMode(QFileDialog::AnyFile);
     dialog.setNameFilters(filters);
     dialog.setViewMode(QFileDialog::Detail);
@@ -873,15 +838,14 @@ void FrameInfoWindow::saveDetails()
     if (dialog.exec() == QDialog::Accepted)
     {
         settings.setValue("FrameInfo/LoadSaveDirectory", dialog.directory().path());
-        filename = dialog.selectedFiles()[0];
+        QString filename = dialog.selectedFiles().constFirst();
         if (!filename.contains('.')) filename += ".txt";
         if (dialog.selectedNameFilter() == filters[0])
         {
-            QFile *outFile = new QFile(filename);
+            QFile outFile(filename);
 
-            if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
+            if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text))
             {
-                delete outFile;
                 return;
             }
 
@@ -889,12 +853,11 @@ void FrameInfoWindow::saveDetails()
             for (int i = 0; i < ui->listFrameID->count(); i++)
             {
                 updateDetailsWindow(FilterUtility::getId(ui->listFrameID->item(i)));
-                dumpNode(ui->treeDetails->invisibleRootItem(), outFile, 0);
-                outFile->write("\n\n");
+                dumpNode(ui->treeDetails->invisibleRootItem(), &outFile, 0);
+                outFile.write("\n\n");
             }
 
-            outFile->close();
-            delete outFile;
+            outFile.close();
         }
     }
 }

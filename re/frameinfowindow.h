@@ -7,7 +7,6 @@
 #include <QTreeWidget>
 #include <candatagrid.h>
 #include "can_structs.h"
-#include "bus_protocols/j1939_handler.h"
 #include "dbc/dbchandler.h"
 
 #include "qcustomplot.h"
@@ -23,7 +22,6 @@ class FrameInfoWindow : public QDialog
 public:
     explicit FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *parent = 0);
     ~FrameInfoWindow();
-    void showEvent(QShowEvent*);
 
 private slots:
     void updateDetailsWindow(QString);
@@ -34,10 +32,10 @@ private slots:
     void mouseDoubleClick();
 
 private:
-    Ui::FrameInfoWindow *ui;
-    QCustomPlot *graphByte[64];
-    QCustomPlot *graphHistogram;
-    CANDataGrid *heatmap;
+    Ui::FrameInfoWindow *ui {};
+    QCustomPlot *graphByte[64] {};
+    QCustomPlot *graphHistogram {};
+    CANDataGrid *heatmap {};
 
     QList<int> foundID;
     QList<CANFrame> frameCache;
@@ -47,8 +45,6 @@ private:
     static const QColor byteGraphColors[64];
     static QPen bytePens[64];
     DBCHandler *dbcHandler;
-
-    QCPGraph *graphRef[64];
 
     void refreshIDList();
     void closeEvent(QCloseEvent *event);
