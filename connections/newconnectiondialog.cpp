@@ -105,23 +105,23 @@ void NewConnectionDialog::selectLawicel()
 
     if (ui->cbCANSpeed->count() == 0)
     {
-        ui->cbCANSpeed->addItem("10000");
-        ui->cbCANSpeed->addItem("20000");
-        ui->cbCANSpeed->addItem("50000");
-        ui->cbCANSpeed->addItem("83333");
-        ui->cbCANSpeed->addItem("100000");
-        ui->cbCANSpeed->addItem("125000");
-        ui->cbCANSpeed->addItem("250000");
-        ui->cbCANSpeed->addItem("500000");
-        ui->cbCANSpeed->addItem("666666");
-        ui->cbCANSpeed->addItem("1000000");
+        ui->cbCANSpeed->addItem("10 k");
+        ui->cbCANSpeed->addItem("20 k");
+        ui->cbCANSpeed->addItem("50 k");
+        ui->cbCANSpeed->addItem("83.333 k");
+        ui->cbCANSpeed->addItem("100 k");
+        ui->cbCANSpeed->addItem("125 k");
+        ui->cbCANSpeed->addItem("250 k");
+        ui->cbCANSpeed->addItem("500 k");
+        ui->cbCANSpeed->addItem("666.666 k");
+        ui->cbCANSpeed->addItem("1 M");
     }
     if (ui->cbDataRate->count() == 0)
     {
-        ui->cbDataRate->addItem("1000000");
-        ui->cbDataRate->addItem("2000000");
-        ui->cbDataRate->addItem("4000000");
-        ui->cbDataRate->addItem("5000000");
+        ui->cbDataRate->addItem("1 M");
+        ui->cbDataRate->addItem("2 M");
+        ui->cbDataRate->addItem("4 M");
+        ui->cbDataRate->addItem("5 M");
     }
     if (ui->cbSerialSpeed->count() == 0)
     {
@@ -397,7 +397,7 @@ int NewConnectionDialog::getBusSpeed()
 {
     if (getConnectionType() == CANCon::LAWICEL)
     {
-        return ui->cbCANSpeed->currentText().toInt();
+        return textToSpeed(ui->cbCANSpeed->currentText());
     }
     else return 0;
 }
@@ -427,16 +427,27 @@ int NewConnectionDialog::getDataRate()
 {
     if (getConnectionType() == CANCon::LAWICEL)
     {
-        return ui->cbDataRate->currentText().toInt();
+        return textToSpeed(ui->cbDataRate->currentText());
     }
     else return 0;
 }
 
 bool NewConnectionDialog::isCanFd()
- {
-     if (getConnectionType() == CANCon::LAWICEL)
-     {
-         return ui->cbCanFd->isChecked();
-     }
-     else return 0;
- }
+{
+    if (getConnectionType() == CANCon::LAWICEL)
+    {
+        return ui->cbCanFd->isChecked();
+    }
+    else return 0;
+}
+
+int NewConnectionDialog::textToSpeed(QString speed)
+{
+    int multiplier = 1;
+    if (speed.endsWith('k')) multiplier = 1000;
+    else if (speed.endsWith('M')) multiplier = 1000'000;
+
+    speed = speed.split(' ').first();
+    float val = speed.toFloat();
+    return val * multiplier;
+}
