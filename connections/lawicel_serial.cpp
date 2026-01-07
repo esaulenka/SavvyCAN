@@ -255,8 +255,8 @@ void LAWICELSerial::deviceConnected()
 
     output.clear();
     output.append('S'); //configure speed of bus
-        switch (this->mBusData[0].mBus.getSpeed())
-        {
+    switch (this->mBusData[0].mBus.getSpeed())
+    {
         case 10000:
             output.append('0');
             break;
@@ -276,6 +276,7 @@ void LAWICELSerial::deviceConnected()
             output.append('5');
             break;
         case 500000:
+        default:
             output.append('6');
             break;
         case 800000:
@@ -284,10 +285,13 @@ void LAWICELSerial::deviceConnected()
         case 1000000:
             output.append('8');
             break;
-        default:
-            output.append('6');
+        case 83333:
+            output.append('9');
             break;
-        }
+        case 666'666:
+            output.append('A');
+            break;
+    }
 
     output.append('\x0D');
 
