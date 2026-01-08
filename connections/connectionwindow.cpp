@@ -299,11 +299,6 @@ void ConnectionWindow::handleRemoveConn()
 
 void ConnectionWindow::handleResetConn()
 {
-    QString port, driver;
-    CANCon::type type;
-    int serSpeed, busSpeed, dataRate;
-    bool canFd;
-
     int selIdx = ui->tableConnections->selectionModel()->currentIndex().row();
     if (selIdx <0) return;
 
@@ -312,32 +307,19 @@ void ConnectionWindow::handleResetConn()
     CANConnection* conn_p = connModel->getAtIdx(selIdx);
     if(!conn_p) return;
 
-    type = conn_p->getType();
-    port = conn_p->getPort();
-    driver = conn_p->getDriver();
-    serSpeed = conn_p->getSerialSpeed();
-    // For multi-bus devices this grabs bus 0; better than zeroing it out.
-    CANBus bus;
-    if (conn_p->getBusSettings(0, bus))
-    {
-        busSpeed = bus.getSpeed();
-        canFd = bus.isCanFD();
-        dataRate = bus.getDataRate();
-    }
-    else
-    {
-        busSpeed = 0;
-        dataRate = 0;
-        canFd = false;
-    }
+    CANBus busConfig;
+    conn_p->getBusSettings(0, busConfig);   // should we handle other buses if any?..
 
+    CANCon::type type = conn_p->getType();
+    QString port = conn_p->getPort();
+    QString driver = conn_p->getDriver();
+    int serSpeed = 0; //TODO: implement these
 
     /* stop and delete connection */
     conn_p->stop();
-
     conn_p = nullptr;
 
-    conn_p = create(type, port, driver, serSpeed, busSpeed,canFd,dataRate);
+    conn_p = create(type, port, driver, serSpeed, busConfig.getSpeed(), busConfig.isCanFD(), busConfig.getDataRate());
     if (conn_p) connModel->replace(selIdx, conn_p);
 }
 
