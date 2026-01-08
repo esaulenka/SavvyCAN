@@ -885,17 +885,27 @@ bool FrameFileIO::loadCARBUSAnalyzerFile(QString filename, QVector<CommFrame>* f
             QList<QString> tokens = line.split(QRegularExpression("\\s+"));
             if (tokens.length() > 3)
             {
-                QString time = tokens[0].replace(",", "");
-                int64_t timeStamp = time.toInt();
-                if (version == 2) {
-                    timeStamp *= 1000; // ms -> us
+                QStringList time = tokens[0].split(',');
+                if (time.size() != 2) {
+                    qDebug("wrong timestamp?!");
+                    continue;
                 }
-                // timestamp wraps every minute
+                int64_t timeStamp;
+                if (version == 2) {
+                    // fractional part in ms
+                    timeStamp = time[0].toInt() * 1000'000ull + time[1].toInt() * 1000;
+                }
+                else { // version 3
+                    // fractional part in us
+                    timeStamp = time[0].toInt() * 1000'000ull + time[1].toInt();
+                }
+                // timestamp may wrap every minute
                 const int64_t oneMinute = 60'000'000;   // micro seconds
                 timeStamp += minuteCnt * oneMinute;
                 // workaround: sometimes packets from different channels may come not in the right order
                 const int possibleTimeDiff = 10000; // 10 ms
                 if (timeStamp + possibleTimeDiff < prevTimestmp) {
+                    qDebug("Timestamp wrap: %lld -> %lld", prevTimestmp, timeStamp);
                     minuteCnt += 1;
                     timeStamp += oneMinute;
                 }
@@ -1122,13 +1132,13 @@ bool FrameFileIO::loadCANHackerFile(QString filename, QVector<CommFrame>* frames
                         addendumTime += 60;
                     }
                     CommFrame thisFrame;
-                    thisFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, static_cast<uint64_t>((tokens[0].toDouble() + addendumTime) * multiplier)));
+                    thisFrame.setTimeStamp(CommFrame::TimeStamp(0, static_cast<uint64_t>((tokens[0].toDouble() + addendumTime) * multiplier)));
                     previousTime = tokens[0].toDouble();
                     thisFrame.setFrameId( static_cast<uint32_t>(tokens[1].toInt(nullptr, 16)) );
                     thisFrame.setExtendedFrameFormat((thisFrame.frameId() > 0x7FF));
-                    thisFrame.isReceived = true;
-                    thisFrame.setFrameType(QCanBusFrame::DataFrame);
-                    thisFrame.bus = 0;
+                    thisFrame.setReceived(true);
+                    thisFrame.setFrameType(CommFrame::CANDataFrame);
+                    thisFrame.setBus(0);
                     int numBytes = tokens[2].toInt(nullptr, 16);
                     QByteArray bytes(numBytes, 0);
                     for (int d = 0; d < numBytes; d++)
