@@ -4805,7 +4805,7 @@ bool FrameFileIO::loadWiresharkFile(QString filename, QVector<CommFrame>* frames
     long long startTimestamp = 0;
     int lineCounter = 0;
     bool foundErrors = false;
-	  char errbuf[PCAP_ERRBUF_SIZE];
+    char errbuf[PCAP_ERRBUF_SIZE];
 
     thisFrame.setFrameType(CommFrame::CANDataFrame);
     
@@ -5030,8 +5030,6 @@ bool FrameFileIO::isIXXATCsvFile(QString filename)
     {
         isMatch = false;
     }
-
-    inFile.close();
     return isMatch;
 }
 
@@ -5151,8 +5149,6 @@ bool FrameFileIO::loadIXXATCsvFile(QString filename, QVector<CommFrame>* frames)
     {
         isMatch = false;
     }
-
-    inFile.close();
     return isMatch;
 }
 
