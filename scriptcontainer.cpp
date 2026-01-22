@@ -3,6 +3,7 @@
 
 #include "scriptcontainer.h"
 #include "connections/canconmanager.h"
+#include "scriptingwindow.h"
 
 ScriptContainer::ScriptContainer()
 {

@@ -2,13 +2,11 @@
 
 #include <Qt>
 #include <QObject>
-#include <QDebug>
 #include <QTimer>
 #include "can_structs.h"
-#include "mainwindow.h"
-#include "canframemodel.h"
 #include "isotp_message.h"
 #include "canfilter.h"
+#include "connections/canconnection.h"
 
 class ISOTP_HANDLER : public QObject
 {

@@ -10,7 +10,7 @@
 #include <QElapsedTimer>
 #include <QJSEngine>
 #include <QTimer>
-#include <qlistwidget.h>
+#include <QTableWidget>
 
 class ScriptingWindow;
 

@@ -1,6 +1,8 @@
 #include "uds_handler.h"
 #include "connections/canconmanager.h"
 #include "isotp_handler.h"
+#include "mainwindow.h"
+#include "utility.h"
 #include <QDebug>
 
 static QVector<CODE_STRUCT> UDS_DIAG_CTRL_SUB = {
