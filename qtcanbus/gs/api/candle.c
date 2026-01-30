@@ -95,7 +95,7 @@ bool candle_get_present_list(candle_list_t *list)
                 break;
             }
         }
-	else {
+        else {
 
             DWORD err = GetLastError();
             if (err==ERROR_NO_MORE_ITEMS) {
@@ -138,15 +138,15 @@ bool __stdcall candle_list_scan(candle_list_handle *list)
     for (unsigned i = 0; i < present_list.num_devices; i++) {
 
         candle_device_t * pdev = &present_list.dev[i];
-	//find exists dev
-	bool exists = false;
-	for (unsigned j = 0; j < CANDLE_MAX_DEVICES; j++) {
-           candle_device_t * dev = &candle_list.dev[j];
-           if (dev->exists && !wcscmp(pdev->path, dev->path)) {
+        //find exists dev
+        bool exists = false;
+        for (unsigned j = 0; j < CANDLE_MAX_DEVICES; j++) {
+            candle_device_t * dev = &candle_list.dev[j];
+            if (dev->exists && !wcscmp(pdev->path, dev->path)) {
                 exists = true;
-		break;
-	    }
-	}
+                break;
+            }
+        }
 
         if (exists)
            continue;
@@ -158,48 +158,48 @@ bool __stdcall candle_list_scan(candle_list_handle *list)
                 newdev = &candle_list.dev[j];
                 break;
             }
-	}
-	printf("new dev:%p %S\n", newdev, newdev->path);
+        }
+        printf("new dev:%p %S\n", newdev, newdev->path);
 
-	if (newdev) {
+        if (newdev) {
 
             newdev->exists = true;
-	    newdev->open = false;
-	    candle_list.num_devices++;
-	    StringCchCopy(newdev->path, sizeof(newdev->path), pdev->path);
-	    /* try to open to read device infos and see if it is avail */
-	    if (candle_dev_interal_open(newdev)) {
-		    newdev->state = CANDLE_DEVSTATE_AVAIL;
-		    candle_dev_close(newdev);
-	    } else {
-		    newdev->state = CANDLE_DEVSTATE_INUSE;
-	    }
+            newdev->open = false;
+            candle_list.num_devices++;
+            StringCchCopy(newdev->path, sizeof(newdev->path), pdev->path);
+            /* try to open to read device infos and see if it is avail */
+            if (candle_dev_interal_open(newdev)) {
+                    newdev->state = CANDLE_DEVSTATE_AVAIL;
+                    candle_dev_close(newdev);
+            } else {
+                    newdev->state = CANDLE_DEVSTATE_INUSE;
+            }
 
-	    newdev->last_error = CANDLE_ERR_OK;
-	}
+            newdev->last_error = CANDLE_ERR_OK;
+        }
     }
 
     //delete removed devs
     for (unsigned i = 0; i < CANDLE_MAX_DEVICES; i++) {
 
         candle_device_t * dev = &candle_list.dev[i];
-	bool present = false;
-	for (unsigned j = 0; j < present_list.num_devices; j++) {
-	    candle_device_t * pdev = &present_list.dev[j];
-	    if (dev->exists && !wcscmp(dev->path, pdev->path)) {
-		present = true;
-		break;
-	    }
-	}
+        bool present = false;
+        for (unsigned j = 0; j < present_list.num_devices; j++) {
+            candle_device_t * pdev = &present_list.dev[j];
+            if (dev->exists && !wcscmp(dev->path, pdev->path)) {
+                present = true;
+                break;
+            }
+        }
 
-	//dev was removed
-	if (dev->exists && !present) {
-	    printf("remove %u\n", i);
-	    if (dev->exists && dev->open)
-	        candle_dev_close(dev);
-	    dev->exists = false;
-	    candle_list.num_devices--;
-	}
+        //dev was removed
+        if (dev->exists && !present) {
+            printf("remove %u\n", i);
+            if (dev->exists && dev->open)
+                candle_dev_close(dev);
+            dev->exists = false;
+            candle_list.num_devices--;
+        }
     }
 
     return true;
@@ -331,7 +331,7 @@ static bool candle_dev_interal_open(candle_handle hdev)
     }
 
     if (!candle_ctrl_get_config(dev, &dev->dconf)) {
-        printf("dconf->icount:%u\n", dev->dconf.icount);	   
+        printf("dconf->icount:%u\n", dev->dconf.icount);
         goto winusb_free;
     }
 
@@ -376,7 +376,7 @@ static bool candle_close_rxurbs(candle_device_t *dev)
 {
     for (unsigned i=0; i<CANDLE_URB_COUNT; i++) {
         if (dev->rxevents[i] != NULL) {
-            CancelIo(dev->rxevents[i]);	
+            CancelIo(dev->rxevents[i]);
             CloseHandle(dev->rxevents[i]);
         }
     }
@@ -406,7 +406,7 @@ bool __stdcall DLL candle_dev_open(candle_handle hdev)
 
 bool __stdcall DLL candle_dev_get_timestamp_us(candle_handle hdev, uint32_t *timestamp_us)
 {
-	return candle_ctrl_get_timestamp(hdev, timestamp_us);
+    return candle_ctrl_get_timestamp(hdev, timestamp_us);
 }
 
 bool __stdcall DLL candle_dev_close(candle_handle hdev)

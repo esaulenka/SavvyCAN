@@ -41,15 +41,15 @@ bool CandleApiInterface::openChannel(uint8_t channel)
 {
     if (!channels) {
 
-	if (!candle_dev_open(_handle))
-		return false;
+        if (!candle_dev_open(_handle))
+            return false;
 
-	uint32_t t_dev;
-	if (candle_dev_get_timestamp_us(_handle, &t_dev))
-	{
-		_hostOffsetStart = QDateTime::currentMSecsSinceEpoch();
-		_deviceTicksStart = t_dev;
-	}
+        uint32_t t_dev;
+        if (candle_dev_get_timestamp_us(_handle, &t_dev))
+        {
+            _hostOffsetStart = QDateTime::currentMSecsSinceEpoch();
+            _deviceTicksStart = t_dev;
+        }
     }
 
     channels |= (1 << channel);
@@ -64,10 +64,10 @@ bool CandleApiInterface::startChannel(uint8_t channel)
 
     if (!_lstn) {
 
-	qDebug() << "create Listener";	   
+        qDebug() << "create Listener";
         _lstn = new CandleApiListener(*this);
 
-	_lstn->startThread();
+        _lstn->startThread();
     }
 
     return true;
@@ -81,10 +81,10 @@ void CandleApiInterface::closeChannel(uint8_t channel)
 
     if (!channels) {
         _lstn->stopThread();
-	delete _lstn;
-	_lstn = 0;
-	qDebug() << "before candle_dev_close()";
-	candle_dev_close(_handle);
+        delete _lstn;
+        _lstn = 0;
+        qDebug() << "before candle_dev_close()";
+        candle_dev_close(_handle);
         qDebug() << "before candle_dev_close()";
     }
 }
@@ -132,7 +132,7 @@ void CandleApiInterface::readFrames()
                 uint32_t dev_ts = candle_frame_timestamp_us(&frame) - _deviceTicksStart;
                 uint64_t ts_us = _hostOffsetStart + dev_ts;
 
-		uint64_t us_since_start = QDateTime::currentMSecsSinceEpoch();
+                uint64_t us_since_start = QDateTime::currentMSecsSinceEpoch();
                 if (us_since_start > 0x180000000)
                 {
                     // device timestamp overflow
@@ -141,7 +141,7 @@ void CandleApiInterface::readFrames()
                 auto ts = QCanBusFrame::TimeStamp(ts_us/1000000, ts_us % 1000000);
                 msg.setTimeStamp(ts);
 
-		//qDebug() << "snd frame:" << msg.toString();
+                //qDebug() << "snd frame:" << msg.toString();
                 emit sig_msg(frame.channel, msg);
             }
         }

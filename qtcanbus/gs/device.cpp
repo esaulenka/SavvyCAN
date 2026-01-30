@@ -12,6 +12,9 @@ CandleApiDevice::CandleApiDevice(QString _name, QString dev_name, uint32_t ch)
 {
     qDebug() << "New CandleApiDevice is created:" << _name << dev_name << ch;
     _iface = findInterface(dev_name);
+    if (!_iface) {
+        qCritical() << "CandleApiDevice: cannot create interface " << _name;
+    }
     name = _name;
     channel = ch;
 }
@@ -28,9 +31,9 @@ bool CandleApiDevice::open()
 
     if (!_iface->openChannel(channel))
     {
-	    qDebug() << "!openChannel()";
-	    setState(CanBusDeviceState::UnconnectedState);
-	    return false;
+        qDebug() << "!openChannel()";
+        setState(CanBusDeviceState::UnconnectedState);
+        return false;
     }
 
     qDebug() << name << "configurationKeys()";
@@ -44,7 +47,7 @@ bool CandleApiDevice::open()
             uint32_t bitrate = var.toInt(&ok);
             if (ok)
             {
-		qDebug() << name << "setBitTiming()" << bitrate;
+                qDebug() << name << "setBitTiming()" << bitrate;
                 if (!setBitTiming(bitrate, 875))
                 {
                     qDebug() << name << "!setBitTiming()" << bitrate;

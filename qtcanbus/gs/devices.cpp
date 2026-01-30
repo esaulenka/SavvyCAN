@@ -169,7 +169,7 @@ QList<QCanBusDeviceInfo> CandleApiDevices::interfaces()
                 if (!candle_dev_get_state(dev, &state))
                     continue;
 
-		if (state != CANDLE_DEVSTATE_AVAIL)
+                if (state != CANDLE_DEVSTATE_AVAIL)
                     continue;
 
                 uint8_t num_channels = 0;
@@ -177,7 +177,7 @@ QList<QCanBusDeviceInfo> CandleApiDevices::interfaces()
 
                 QString dev_name = name + QString::number(cnt);
                 CandleApiInterface *iface = findInterface(dev);
-		if (iface == nullptr)
+                if (iface == nullptr)
                 {
                     iface = new CandleApiInterface(dev, dev_name);
                     addInterface(iface);
@@ -186,7 +186,7 @@ QList<QCanBusDeviceInfo> CandleApiDevices::interfaces()
                 if (!iface->exists())
                     continue;
 
-		qDebug() << "exists";
+                qDebug() << "exists";
                 for (uint8_t ch = 0; ch < num_channels; ch++) {
                     QCanBusDeviceInfo dev = createDeviceInfo(
                         "gs",                                       // plugin

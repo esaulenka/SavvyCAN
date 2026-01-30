@@ -34,7 +34,6 @@ QList<QCanBusDeviceInfo> CandleLightCanBusPlugin::availableDevices(QString *erro
 QCanBusDevice *CandleLightCanBusPlugin::createDevice(const QString &interfaceName, QString *errorMessage) const
 {
     qDebug() << "createDevice:" << interfaceName;
-    Q_UNUSED(errorMessage);
     auto const info = CandleLightCanBusPlugin::availableDevices(errorMessage);
     for (auto const& entry: info)
     {

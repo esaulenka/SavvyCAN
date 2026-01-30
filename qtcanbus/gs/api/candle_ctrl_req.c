@@ -34,8 +34,7 @@ enum {
 
 static bool usb_control_msg(WINUSB_INTERFACE_HANDLE hnd, uint8_t request, uint8_t requesttype, uint16_t value, uint16_t index, void *data, uint16_t size)
 {
-    WINUSB_SETUP_PACKET packet;
-    memset(&packet, 0, sizeof(packet));
+    WINUSB_SETUP_PACKET packet = {0};
 
     packet.Request = request;
     packet.RequestType = requesttype;
