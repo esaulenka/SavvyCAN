@@ -35,8 +35,7 @@ protected:
                   bool pCanFd,
                   int pDataRate,
                   int pNumBuses,
-                  int pQueueLen,
-                  bool pUseThread);
+                  int pQueueLen);
 
 public:
 
@@ -318,6 +317,11 @@ protected:
      * @note implementing this function is optional
      */
     virtual bool piSendFrames(const QList<CommFrame>&);
+
+    /**
+     * @brief move oursef to the separate thread
+     */
+    void moveToSeparateThread();
 
 private:
     LFQueue<CommFrame>   mQueue;

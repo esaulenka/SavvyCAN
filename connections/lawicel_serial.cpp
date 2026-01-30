@@ -9,7 +9,7 @@
 #include "utility.h"
 
 LAWICELSerial::LAWICELSerial(QString portName, int serialSpeed, int lawicelSpeed, bool canFd, int dataRate) :
-    CANConnection(portName, "LAWICEL", CANCon::LAWICEL,serialSpeed, lawicelSpeed, canFd, dataRate, 3, 4000, true),
+    CANConnection(portName, "LAWICEL", CANCon::LAWICEL,serialSpeed, lawicelSpeed, canFd, dataRate, 3, 4000),
     mTimer(this) /*NB: set this as parent of timer to manage it from working thread */
 {
     sendDebug("LAWICELSerial()");
@@ -17,6 +17,8 @@ LAWICELSerial::LAWICELSerial(QString portName, int serialSpeed, int lawicelSpeed
     serial = nullptr;
 
     readSettings();
+
+    moveToSeparateThread();
 }
 
 

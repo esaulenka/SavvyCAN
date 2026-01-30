@@ -16,7 +16,7 @@
 #include "canserver.h"
 
 CANserver::CANserver(QString serverAddressString) :
-    CANConnection(serverAddressString, "CANserver", CANCon::CANSERVER, 0, 0, false, 0, 3, 4000, true),
+    CANConnection(serverAddressString, "CANserver", CANCon::CANSERVER, 0, 0, false, 0, 3, 4000),
     _udpClient(new QUdpSocket(this)),
     _heartbeatTimer(new QTimer(this))
 {
@@ -34,11 +34,13 @@ CANserver::CANserver(QString serverAddressString) :
     
     // setup udp client
     this->_canserverAddress = QHostAddress(serverAddressString);
-    connect(_udpClient, SIGNAL(readyRead()), this, SLOT(readNetworkData()));
+    connect(_udpClient, &QUdpSocket::readyRead, this, &CANserver::readNetworkData);
 
     // setup signal and slot
     connect(_heartbeatTimer, SIGNAL(timeout()), this, SLOT(heartbeatTimerSlot()));
     _heartbeatTimer->stop();
+
+    moveToSeparateThread();
 }
 
 

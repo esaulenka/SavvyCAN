@@ -10,8 +10,7 @@ CANConnection::CANConnection(QString pPort,
                              bool pCanFd,
                              int pDataRate,
                              int pNumBuses,
-                             int pQueueLen,
-                             bool pUseThread) :
+                             int pQueueLen) :
     mNumBuses(pNumBuses),
     mSerialSpeed(pSerialSpeed),
     mQueue(),
@@ -47,19 +46,21 @@ CANConnection::CANConnection(QString pPort,
             mBusData[0].mBus.setCanFD(pCanFd);
         }
     }
- 
-    /* if needed, create a thread and move ourself into it */
-    if(pUseThread) {
-        mThread_p = new QThread();
-        /* move ourself to the thread */
-        if (!moveToThread(mThread_p)) {
-            qWarning() << "CANConnection::start(): cannot moveToThread()";
-        }
-        /* start the thread */
-        mThread_p->start(QThread::HighPriority);
-    }
 }
 
+/* if needed, create a thread and move ourself into it
+    use it in the constructor when everyting is complete
+*/
+void CANConnection::moveToSeparateThread()
+{
+    mThread_p = new QThread();
+    /* move ourself to the thread */
+    if (!moveToThread(mThread_p)) {
+        qWarning() << "CANConnection::start(): cannot moveToThread()";
+    }
+    /* start the thread */
+    mThread_p->start(QThread::HighPriority);
+}
 
 CANConnection::~CANConnection()
 {

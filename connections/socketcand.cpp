@@ -10,7 +10,7 @@
 #include "socketcand.h"
 
 SocketCANd::SocketCANd(QString portName) :
-    CANConnection(portName, "kayak", CANCon::KAYAK, 0, 0, false, 0, 1, 4000, true),
+    CANConnection(portName, "kayak", CANCon::KAYAK, 0, 0, false, 0, 1, 4000),
     mTimer(this) /*NB: set this as parent of timer to manage it from working thread */
 {
 
@@ -47,6 +47,8 @@ SocketCANd::SocketCANd(QString portName) :
         bus_info.setSpeed(500000);
         setBusConfig(i, bus_info);
     }
+
+    moveToSeparateThread();
 }
 
 
