@@ -188,7 +188,17 @@ QList<QCanBusDeviceInfo> CandleApiDevices::interfaces()
 
 		qDebug() << "exists";
                 for (uint8_t ch = 0; ch < num_channels; ch++) {
-                    result.append(createDeviceInfo(dev_name + "." + QString::number(ch), dev_name, description, ch, false, false));
+                    QCanBusDeviceInfo dev = createDeviceInfo(
+                        "gs",                                       // plugin
+                        dev_name + " ch" + QString::number(ch),     // name
+                        dev_name,                                   // serial number
+                        description,                                // description
+                        "",                                         // alias
+                        ch,                                         // channel
+                        false,                                      // isVirtual
+                        false                                       // isFlexibleDataRateCapable
+                    );
+                    result.append(dev);
                 }
             }
         }

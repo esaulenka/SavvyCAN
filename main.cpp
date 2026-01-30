@@ -1,6 +1,11 @@
 #include "mainwindow.h"
 #include <QApplication>
 
+#include <QtPlugin>
+#ifdef Q_OS_WIN
+Q_IMPORT_PLUGIN(CandleLightCanBusPlugin)
+#endif
+
 class SavvyCANApplication : public QApplication
 {
 public:

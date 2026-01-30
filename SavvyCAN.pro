@@ -251,6 +251,10 @@ win32-g++ {
    LIBS += libopengl32
 }
 
+win32 {
+   include(qtcanbus/gs/gs.pri)
+}
+
 unix {
    isEmpty(PREFIX) {
       PREFIX=/usr/local

@@ -146,7 +146,8 @@ bool SerialBusConnection::piSendFrame(const CommFrame& pFrame)
 
 /* disconnect device */
 void SerialBusConnection::disconnectDevice() {
-    if(mDev_p) {
+    if (mDev_p &&
+        mDev_p->state() == QCanBusDevice::ConnectedState) {
         mDev_p->disconnectDevice();
     }
 }

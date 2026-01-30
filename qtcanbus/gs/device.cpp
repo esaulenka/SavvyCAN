@@ -34,8 +34,8 @@ bool CandleApiDevice::open()
     }
 
     qDebug() << name << "configurationKeys()";
-    QVector<int> keys = configurationKeys();
-    foreach (int key, keys)
+    QVector<ConfigurationKey> keys = configurationKeys();
+    foreach (ConfigurationKey key, keys)
     {
         if (key == QCanBusDevice::BitRateKey)
         {
