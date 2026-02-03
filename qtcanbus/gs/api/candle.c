@@ -264,6 +264,7 @@ static bool candle_dev_interal_open(candle_handle hdev)
 
     memset(dev->rxevents, 0, sizeof(dev->rxevents));
     memset(dev->rxurbs, 0, sizeof(dev->rxurbs));
+    dev->rxIndex = 0;
 
     dev->deviceHandle = CreateFile(
         dev->path,
@@ -435,7 +436,7 @@ bool __stdcall DLL candle_dev_exists(candle_handle hdev)
 {
     candle_device_t *dev = (candle_device_t*)hdev;
 
-   return dev->exists;
+    return dev->exists;
 }
 
 candle_err_t __stdcall DLL candle_dev_last_error(candle_handle hdev)
@@ -591,7 +592,9 @@ bool __stdcall DLL candle_frame_read(candle_handle hdev, candle_frame_t *frame, 
         return false;
     }
 
-    DWORD urb_num = wait_result - WAIT_OBJECT_0;
+    DWORD urb_num = dev->rxIndex;
+    dev->rxIndex = (dev->rxIndex + 1) % CANDLE_URB_COUNT;
+
     DWORD bytes_transfered;
 
     if (!WinUsb_GetOverlappedResult(dev->winUSBHandle, &dev->rxurbs[urb_num].ovl, &bytes_transfered, false)) {
@@ -606,11 +609,11 @@ bool __stdcall DLL candle_frame_read(candle_handle hdev, candle_frame_t *frame, 
         return false;
     }
 
+    memcpy(frame, dev->rxurbs[urb_num].buf, sizeof(*frame));
+
     if (bytes_transfered < sizeof(*frame)) {
         frame->timestamp_us = 0;
     }
-
-    memcpy(frame, dev->rxurbs[urb_num].buf, sizeof(*frame));
 
     return candle_prepare_read(dev, urb_num);
 }
