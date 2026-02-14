@@ -122,11 +122,6 @@ void FileComparatorWindow::calculateDetails()
 {
     QMap<uint32_t, FrameData> interestedIDs;
     QMap<uint32_t, FrameData> referenceIDs;
-    QTreeWidgetItem *interestedOnlyBase, *referenceOnlyBase = nullptr, *sharedBase, *bitmapBaseInterested, *bitmapBaseReference = nullptr;
-    QTreeWidgetItem *valuesBase, *detail, *sharedItem, *valuesInterested, *valuesReference = nullptr;
-    uint64_t tmp;
-    const unsigned char *data;
-    int dataLen;
 
     bool uniqueInterested = ui->ckUniqueToInterested->isChecked();
 
@@ -142,14 +137,15 @@ void FileComparatorWindow::calculateDetails()
 
     ui->treeDetails->clear();
 
-    interestedOnlyBase = new QTreeWidgetItem();
+    QTreeWidgetItem *interestedOnlyBase = new QTreeWidgetItem();
     interestedOnlyBase->setText(0,"IDs found only in " + interestedFilename);
+    QTreeWidgetItem *referenceOnlyBase = nullptr;
     if (!uniqueInterested)
     {
         referenceOnlyBase = new QTreeWidgetItem();
         referenceOnlyBase->setText(0, "IDs found only in Side 2 - Reference frames");
     }
-    sharedBase = new QTreeWidgetItem();
+    QTreeWidgetItem *sharedBase = new QTreeWidgetItem();
     sharedBase->setText(0,"IDs found on both sides");
 
     //first we have to fill out the data structures to get ready to do the report
@@ -157,15 +153,15 @@ void FileComparatorWindow::calculateDetails()
     {
         CommFrame frame = interestedFrames.at(x);
         DBC_MESSAGE *msg = dbcHandler->findMessage(frame.frameId());
-        data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
-        dataLen = frame.payload().length();
+        const unsigned char *data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
+        int dataLen = frame.payload().length();
 
         if (interestedIDs.contains(frame.frameId())) //if we saw this ID before then add to the QList in there
         {
             for (int y = 0; y < dataLen; y++)
             {
                 interestedIDs[frame.frameId()].values[y][data[y]]++;
-                tmp = data[y];
+                uint64_t tmp = data[y];
                 tmp = tmp << (8 * y);
                 interestedIDs[frame.frameId()].bitmap |= tmp;
                 //qDebug() << "bitmap: " << QString::number(interestedIDs[frame.frameId()].bitmap, 16);
@@ -213,7 +209,7 @@ void FileComparatorWindow::calculateDetails()
             for (int y = 0; y < dataLen; y++)
             {
                 newData->values[y][data[y]] = 1;
-                tmp = data[y];
+                uint64_t tmp = data[y];
                 tmp = tmp << (8 * y);
                 newData->bitmap |= tmp;
                 //qDebug() << "bitmap: " << QString::number(newData->bitmap, 16);
@@ -251,15 +247,15 @@ void FileComparatorWindow::calculateDetails()
     {
         CommFrame frame = referenceFrames.at(x);
         DBC_MESSAGE *msg = dbcHandler->findMessage(frame.frameId());
-        data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
-        dataLen = frame.payload().length();
+        const unsigned char *data = reinterpret_cast<const unsigned char *>(frame.payload().constData());
+        int dataLen = frame.payload().length();
 
         if (referenceIDs.contains(frame.frameId())) //if we saw this ID before then add to the QList in there
         {
             for (int y = 0; y < dataLen; y++)
             {
                 referenceIDs[frame.frameId()].values[y][data[y]]++;
-                tmp = data[y];
+                uint64_t tmp = data[y];
                 tmp = tmp << (8 * y);
                 referenceIDs[frame.frameId()].bitmap |= tmp;
                 //qDebug() << "bitmap: " << QString::number(referenceIDs[frame.frameId()].bitmap, 16);
@@ -304,7 +300,7 @@ void FileComparatorWindow::calculateDetails()
             for (int y = 0; y < dataLen; y++)
             {
                 newData->values[y][data[y]] = 1;
-                tmp = data[y];
+                uint64_t tmp = data[y];
                 tmp = tmp << (8 * y);
                 newData->bitmap |= tmp;
                 //qDebug() << "bitmap: " << QString::number(newData->bitmap, 16);
@@ -340,9 +336,8 @@ void FileComparatorWindow::calculateDetails()
     //now we iterate through the IDs within both files and see which are unique to one file and which
     //are shared
     bool interestedHadUnique = false;
-    QMap<uint32_t, FrameData>::iterator i;
     int framesCounter = 0;
-    for (i = interestedIDs.begin(); i != interestedIDs.end(); ++i)
+    for (auto i = interestedIDs.cbegin(); i != interestedIDs.cend(); ++i)
     {
         framesCounter++;
         if (framesCounter > 50)
@@ -354,7 +349,7 @@ void FileComparatorWindow::calculateDetails()
         uint32_t keyone = i.key();
         if (!referenceIDs.contains(keyone))
         {
-            valuesBase = new QTreeWidgetItem();
+            QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
             DBC_MESSAGE *msg = dbcHandler->findMessage(keyone);
             if (msg)
             {
@@ -366,7 +361,7 @@ void FileComparatorWindow::calculateDetails()
         else //ID was in both files
         {
             interestedHadUnique = false;
-            sharedItem = new QTreeWidgetItem();
+            QTreeWidgetItem *sharedItem = new QTreeWidgetItem();
             DBC_MESSAGE *msg = dbcHandler->findMessage(keyone);
             if (msg)
             {
@@ -379,8 +374,9 @@ void FileComparatorWindow::calculateDetails()
             FrameData interested = interestedIDs[keyone];
             FrameData reference = referenceIDs[keyone];
 
-            bitmapBaseInterested = new QTreeWidgetItem();
+            QTreeWidgetItem *bitmapBaseInterested = new QTreeWidgetItem();
             bitmapBaseInterested->setText(0, "Bits set only in " + interestedFilename);
+            QTreeWidgetItem * bitmapBaseReference = nullptr;
             if (!uniqueInterested)
             {
                 bitmapBaseReference = new QTreeWidgetItem();
@@ -395,7 +391,7 @@ void FileComparatorWindow::calculateDetails()
             //first up, which bits were set in one file but not the other
             for (int b = 0; b < (8 * interested.dataLen); b++)
             {
-                detail = new QTreeWidgetItem();
+                QTreeWidgetItem *detail = new QTreeWidgetItem();
                 detail->setText(0, QString::number(b) + " (" + QString::number(b / 8) + ":" + QString::number(b % 8) + ")");
                 if ( (interestedBits & 1) && !(referenceBits & 1) )
                 {
@@ -413,11 +409,12 @@ void FileComparatorWindow::calculateDetails()
 
             for (int i = 0; i < qMax(interested.dataLen, reference.dataLen); i++)
             {
-                valuesBase = new QTreeWidgetItem();
+                QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
                 valuesBase->setText(0, "Byte " + QString::number(i));
                 sharedItem->addChild(valuesBase);
-                valuesInterested = new QTreeWidgetItem();
+                QTreeWidgetItem *valuesInterested = new QTreeWidgetItem();
                 valuesInterested->setText(0, "Values found only in " + interestedFilename);
+                QTreeWidgetItem * valuesReference = nullptr;
                 if (!uniqueInterested)
                 {
                     valuesReference = new QTreeWidgetItem();
@@ -427,7 +424,7 @@ void FileComparatorWindow::calculateDetails()
                 if (!uniqueInterested) valuesBase->addChild(valuesReference);
                 for (int j = 0; j < 256; j++)
                 {
-                    detail = new QTreeWidgetItem();
+                    QTreeWidgetItem *detail = new QTreeWidgetItem();
                     detail->setText(0, Utility::formatHexNum(static_cast<unsigned int>(j)));
                     if ((interested.values[i][j] > 0) && (reference.values[i][j] == 0) )
                     {
@@ -448,11 +445,12 @@ void FileComparatorWindow::calculateDetails()
             QHash<QString, QList<QString>>::const_iterator it = reference.signalInstances.constBegin();
             while (it != reference.signalInstances.constEnd())
             {
-                valuesBase = new QTreeWidgetItem();
+                QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
                 valuesBase->setText(0, "Signal " + it.key());
                 sharedItem->addChild(valuesBase);
-                valuesInterested = new QTreeWidgetItem();
+                QTreeWidgetItem *valuesInterested = new QTreeWidgetItem();
                 valuesInterested->setText(0, "Values found only in " + interestedFilename);
+                QTreeWidgetItem * valuesReference = nullptr;
                 if (!uniqueInterested)
                 {
                     valuesReference = new QTreeWidgetItem();
@@ -468,7 +466,7 @@ void FileComparatorWindow::calculateDetails()
                     if (!interestedVals.contains(str))
                     {
                         qDebug() << "Interested frames didn't contain value: " << str << " in signal " << it.key();
-                        detail = new QTreeWidgetItem();
+                        QTreeWidgetItem *detail = new QTreeWidgetItem();
                         detail->setText(0, str);
                         valuesReference->addChild(detail);
                     }
@@ -479,7 +477,7 @@ void FileComparatorWindow::calculateDetails()
                     if (!refVals.contains(str))
                     {
                         qDebug() << "Reference frames didn't contain value: " << str << " in signal " << it.key();
-                        detail = new QTreeWidgetItem();
+                        QTreeWidgetItem *detail = new QTreeWidgetItem();
                         detail->setText(0, str);
                         valuesInterested->addChild(detail);
                     }
@@ -501,7 +499,7 @@ void FileComparatorWindow::calculateDetails()
             unsigned int keytwo = itwo.key();
             if (!interestedIDs.contains(keytwo))
             {
-                valuesBase = new QTreeWidgetItem();
+                QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
                 DBC_MESSAGE *msg = dbcHandler->findMessage(keytwo);
                 if (msg)
                 {
