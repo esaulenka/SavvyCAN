@@ -47,11 +47,13 @@ CANserver::CANserver(QString serverAddressString) :
 CANserver::~CANserver()
 {
     qDebug() << "CANserver: " << "Deconstructing Connection...";
-    
+
     stop();
-    
+
     delete _heartbeatTimer; _heartbeatTimer = NULL;
     delete _udpClient; _udpClient = NULL;
+
+    killSeparateThread();
 }
 
 void CANserver::piStarted()

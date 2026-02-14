@@ -33,6 +33,7 @@ MQTT_BUS::~MQTT_BUS()
 {
     delete crypto;
     stop();
+    killSeparateThread();
     sendDebug("~MQTT_BUS");
 }
 

@@ -37,6 +37,7 @@ GVRetSerial::GVRetSerial(QString portName, bool useTcp) :
 GVRetSerial::~GVRetSerial()
 {
     stop();
+    killSeparateThread();
     sendDebug("~GVRetSerial()");
 }
 

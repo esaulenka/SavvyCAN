@@ -322,6 +322,10 @@ protected:
      * @brief move oursef to the separate thread
      */
     void moveToSeparateThread();
+    /**
+     * @brief stop and kill thread. To be used in child's destructors
+     */
+    void killSeparateThread();
 
 private:
     LFQueue<CommFrame>   mQueue;

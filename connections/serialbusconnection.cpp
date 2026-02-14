@@ -22,6 +22,7 @@ SerialBusConnection::SerialBusConnection(QString portName, QString driverName, i
 SerialBusConnection::~SerialBusConnection()
 {
     stop();
+    killSeparateThread();
 }
 
 

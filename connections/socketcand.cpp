@@ -69,6 +69,7 @@ SocketCANd::~SocketCANd()
         }
     }
     tcpClient.clear();
+    killSeparateThread();
     sendDebug("~SocketCANd()");
 }
 

@@ -64,6 +64,10 @@ void CANConnection::moveToSeparateThread()
 
 CANConnection::~CANConnection()
 {
+}
+
+void CANConnection::killSeparateThread()
+{
     /* stop and delete thread */
     if(mThread_p) {
         mThread_p->quit();
@@ -72,7 +76,6 @@ CANConnection::~CANConnection()
         mThread_p = nullptr;
     }
 }
-
 
 void CANConnection::start()
 {

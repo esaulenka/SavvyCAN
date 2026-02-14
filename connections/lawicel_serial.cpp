@@ -25,6 +25,7 @@ LAWICELSerial::LAWICELSerial(QString portName, int serialSpeed, int lawicelSpeed
 LAWICELSerial::~LAWICELSerial()
 {
     stop();
+    killSeparateThread();
     sendDebug("~LAWICELSerial()");
 }
 
