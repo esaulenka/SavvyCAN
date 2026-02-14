@@ -531,12 +531,10 @@ void FileComparatorWindow::calculateDetails()
 
 void FileComparatorWindow::saveDetails()
 {
-    QString filename;
     QFileDialog dialog(this);
     QSettings settings;
 
-    QStringList filters;
-    filters.append(QString(tr("Text File (*.txt)")));
+    QStringList filters( {tr("Text File (*.txt)"),} );
 
     dialog.setFileMode(QFileDialog::AnyFile);
     dialog.setNameFilters(filters);
@@ -546,12 +544,12 @@ void FileComparatorWindow::saveDetails()
 
     if (dialog.exec() == QDialog::Accepted)
     {
-        filename = dialog.selectedFiles()[0];
+        QString filename = dialog.selectedFiles()[0];
         settings.setValue("FileComparator/LoadSaveDirectory", dialog.directory().path());
         if (!filename.contains('.')) filename += ".txt";
-        QFile *outFile = new QFile(filename);
+        QFile outFile(filename);
 
-        if (!outFile->open(QIODevice::WriteOnly | QIODevice::Text))
+        if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text))
             return;
 
         QTreeWidget *tree = ui->treeDetails;
@@ -563,15 +561,14 @@ void FileComparatorWindow::saveDetails()
           QString itemText = item->text(0);
           while (item->parent())
           {
-              outFile->write("   ");
+              outFile.write("   ");
               item = item->parent();
           }
-          outFile->write(itemText.toUtf8() + "\n");
+          outFile.write(itemText.toUtf8() + "\n");
           ++it;
         }
 
-        outFile->close();
-
+        outFile.close();
     }
 }
 
