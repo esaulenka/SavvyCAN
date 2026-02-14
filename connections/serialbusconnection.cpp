@@ -178,8 +178,6 @@ void SerialBusConnection::framesWritten(qint64 count)
 
 void SerialBusConnection::framesReceived()
 {
-    uint64_t timeBasis = CANConManager::getInstance()->getTimeBasis();
-
     /* sanity checks */
     if(!mDev_p)
         return;
@@ -229,10 +227,10 @@ void SerialBusConnection::framesReceived()
                 errs.fromInt(recFrame.error().toInt());
                 frame_p->setError(errs);
 
-                if (useSystemTime) {
-                    frame_p->setTimeStamp(CommFrame::TimeStamp::fromMicroSeconds(QDateTime::currentMSecsSinceEpoch() * 1000ul));
-                }
-                else frame_p->setTimeStamp(CommFrame::TimeStamp(0, (recFrame.timeStamp().seconds() * 1000000ul + recFrame.timeStamp().microSeconds()) - timeBasis));
+                quint64 timestamp = useSystemTime ?
+                    QDateTime::currentMSecsSinceEpoch() * 1000ul :
+                    recFrame.timeStamp().seconds() * 1000000ul + recFrame.timeStamp().microSeconds();
+                frame_p->setTimeStamp(CommFrame::TimeStamp::fromMicroSeconds(timestamp));
 
                 checkTargettedFrame(*frame_p);
 

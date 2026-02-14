@@ -31,8 +31,9 @@ private:
     QString _name;
     uint32_t channels;
     CandleApiListener *_lstn;
-    uint32_t _deviceTicksStart;
-    uint64_t _hostOffsetStart;
+
+    uint64_t _timestampOffset;
+    uint64_t _timestampLast;
 
 signals:
     void sig_msg(quint8 channel, const QCanBusFrame & frame);

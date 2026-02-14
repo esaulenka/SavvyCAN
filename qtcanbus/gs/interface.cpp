@@ -10,7 +10,6 @@ CandleApiInterface::CandleApiInterface(candle_handle handle, QString name) :
     channels(0),
     _lstn(0)
 {
-    _hostOffsetStart = QDateTime::currentMSecsSinceEpoch();
 }
 
 CandleApiInterface::~CandleApiInterface()
@@ -44,11 +43,14 @@ bool CandleApiInterface::openChannel(uint8_t channel)
         if (!candle_dev_open(_handle))
             return false;
 
+        _timestampOffset = QDateTime::currentMSecsSinceEpoch() * 1000;
+        _timestampLast = 0;
         uint32_t t_dev;
-        if (candle_dev_get_timestamp_us(_handle, &t_dev))
-        {
-            _hostOffsetStart = QDateTime::currentMSecsSinceEpoch();
-            _deviceTicksStart = t_dev;
+        if (candle_dev_get_timestamp_us(_handle, &t_dev)) {
+            _timestampOffset -= t_dev;
+        }
+        else {
+            qWarning() << "Candle: hw timestamps not supported?!";
         }
     }
 
@@ -97,7 +99,7 @@ bool CandleApiInterface::writeFrame(candle_frame_t & frame)
 void CandleApiInterface::readFrames()
 {
     candle_frame_t frame;
-    unsigned int timeout_ms = 10;
+    const unsigned int timeout_ms = 10;
 
     while (_lstn->_shouldBeRunning)
     {
@@ -123,23 +125,25 @@ void CandleApiInterface::readFrames()
                 {
                     msg.setExtendedFrameFormat(false);
                 }
-                msg.setFrameId(candle_frame_id(&frame) & 0x1FFFFFFF); //??
+                msg.setFrameId(candle_frame_id(&frame));
 
                 uint8_t dlc = candle_frame_dlc(&frame);
                 QByteArray payload = QByteArray(reinterpret_cast<const char*>(candle_frame_data(&frame)), dlc);
                 msg.setPayload(payload);
 
-                uint32_t dev_ts = candle_frame_timestamp_us(&frame) - _deviceTicksStart;
-                uint64_t ts_us = _hostOffsetStart + dev_ts;
+                uint64_t ts_us = _timestampOffset + candle_frame_timestamp_us(&frame);
 
-                uint64_t us_since_start = QDateTime::currentMSecsSinceEpoch();
-                if (us_since_start > 0x180000000)
+                const uint64_t timestampGap = 5000; // allow 5 ms fluctuations from device
+                if (_timestampLast > ts_us + timestampGap)
                 {
-                    // device timestamp overflow
-                    ts_us += us_since_start & 0xFFFFFFFF00000000;
+                    //qDebug() << "Candle timestamp wrap" << _timestampLast << " vs " << ts_us;
+                    // device timestamp had overflow (every 71 minutes)
+                    ts_us += 1ull << 32;
+                    _timestampOffset += 1ull << 32;
                 }
-                auto ts = QCanBusFrame::TimeStamp(ts_us/1000000, ts_us % 1000000);
-                msg.setTimeStamp(ts);
+                _timestampLast = ts_us;
+
+                msg.setTimeStamp(QCanBusFrame::TimeStamp(0, ts_us));
 
                 //qDebug() << "snd frame:" << msg.toString();
                 emit sig_msg(frame.channel, msg);
