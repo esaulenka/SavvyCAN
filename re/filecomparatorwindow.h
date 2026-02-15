@@ -49,6 +49,8 @@ private:
     bool eventFilter(QObject *obj, QEvent *event);
     void readSettings();
     void writeSettings();
+
+    QString messageName(uint32_t id) const;
 };
 
 #endif // FILECOMPARATORWINDOW_H

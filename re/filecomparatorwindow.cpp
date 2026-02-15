@@ -349,41 +349,22 @@ void FileComparatorWindow::calculateDetails()
         uint32_t keyone = i.key();
         if (!referenceIDs.contains(keyone))
         {
-            QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
-            DBC_MESSAGE *msg = dbcHandler->findMessage(keyone);
-            if (msg)
-            {
-                valuesBase->setText(0, Utility::formatHexNum(keyone) + " (" + msg->name + ")");
-            }
-            else valuesBase->setText(0, Utility::formatHexNum(keyone));
-            interestedOnlyBase->addChild(valuesBase);
+            new QTreeWidgetItem(interestedOnlyBase, QStringList(messageName(keyone)));
         }
         else //ID was in both files
         {
             interestedHadUnique = false;
             QTreeWidgetItem *sharedItem = new QTreeWidgetItem();
-            DBC_MESSAGE *msg = dbcHandler->findMessage(keyone);
-            if (msg)
-            {
-                sharedItem->setText(0, Utility::formatHexNum(keyone) + " (" + msg->name + ")");
-            }
-            else sharedItem->setText(0, Utility::formatHexNum(keyone));
+            sharedItem->setText(0, messageName(keyone));
+
             //if the ID was in both files then we can use the data accumulated above in bitmap
             //and values to figure out what has changed between the two files
 
             FrameData interested = interestedIDs[keyone];
             FrameData reference = referenceIDs[keyone];
 
-            QTreeWidgetItem *bitmapBaseInterested = new QTreeWidgetItem();
-            bitmapBaseInterested->setText(0, "Bits set only in " + interestedFilename);
-            QTreeWidgetItem * bitmapBaseReference = nullptr;
-            if (!uniqueInterested)
-            {
-                bitmapBaseReference = new QTreeWidgetItem();
-                bitmapBaseReference->setText(0, "Bits set only in Side 2 - Reference frames");
-            }
-            sharedItem->addChild(bitmapBaseInterested);
-            if (!uniqueInterested) sharedItem->addChild(bitmapBaseReference);
+            QTreeWidgetItem *bitmapBaseInterested = nullptr;
+            QTreeWidgetItem *bitmapBaseReference = nullptr;
 
             uint64_t interestedBits = interested.bitmap;
             uint64_t referenceBits = reference.bitmap;
@@ -391,16 +372,27 @@ void FileComparatorWindow::calculateDetails()
             //first up, which bits were set in one file but not the other
             for (int b = 0; b < (8 * interested.dataLen); b++)
             {
-                QTreeWidgetItem *detail = new QTreeWidgetItem();
-                detail->setText(0, QString::number(b) + " (" + QString::number(b / 8) + ":" + QString::number(b % 8) + ")");
+                QString bitName = QString::number(b) + " (" + QString::number(b / 8) + ":" + QString::number(b % 8) + ")";
+
                 if ( (interestedBits & 1) && !(referenceBits & 1) )
                 {
-                    bitmapBaseInterested->addChild(detail);
+                    if (!bitmapBaseInterested) {
+                        bitmapBaseInterested =
+                            new QTreeWidgetItem(sharedItem, QStringList("Bits set only in " + interestedFilename));
+                    }
+                    new QTreeWidgetItem(bitmapBaseInterested, QStringList(bitName));
                     interestedHadUnique = true;
                 }
                 else if ( !(interestedBits & 1) && (referenceBits & 1) )
                 {
-                    if (!uniqueInterested) bitmapBaseReference->addChild(detail);
+                    if (!uniqueInterested) {
+                        if (!bitmapBaseReference)
+                        {
+                            bitmapBaseReference = 
+                                new QTreeWidgetItem(sharedItem, QStringList("Bits set only in Side 2 - Reference frames"));
+                        }
+                        new QTreeWidgetItem(bitmapBaseReference, QStringList(bitName));
+                    }
                 }
                 //qDebug() << b << "  " << QString::number(interestedBits, 16) << "  " << QString::number(referenceBits, 16);
                 interestedBits = interestedBits >> 1;
@@ -409,32 +401,40 @@ void FileComparatorWindow::calculateDetails()
 
             for (int i = 0; i < qMax(interested.dataLen, reference.dataLen); i++)
             {
-                QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
-                valuesBase->setText(0, "Byte " + QString::number(i));
-                sharedItem->addChild(valuesBase);
-                QTreeWidgetItem *valuesInterested = new QTreeWidgetItem();
-                valuesInterested->setText(0, "Values found only in " + interestedFilename);
-                QTreeWidgetItem * valuesReference = nullptr;
-                if (!uniqueInterested)
-                {
-                    valuesReference = new QTreeWidgetItem();
-                    valuesReference->setText(0, "Values found only in Side 2 - Reference frames");
-                }
-                valuesBase->addChild(valuesInterested);
-                if (!uniqueInterested) valuesBase->addChild(valuesReference);
+                QTreeWidgetItem *valuesBase = 
+                    new QTreeWidgetItem(sharedItem, QStringList("Byte " + QString::number(i)));
+
+                QTreeWidgetItem *valuesInterested = nullptr;
+                QTreeWidgetItem *valuesReference = nullptr;
+
                 for (int j = 0; j < 256; j++)
                 {
-                    QTreeWidgetItem *detail = new QTreeWidgetItem();
-                    detail->setText(0, Utility::formatHexNum(static_cast<unsigned int>(j)));
+                    QString byteValue = Utility::formatHexNum(j);
+
                     if ((interested.values[i][j] > 0) && (reference.values[i][j] == 0) )
                     {
-                        valuesInterested->addChild(detail);
+                        if (!valuesInterested) {
+                            valuesInterested = 
+                                new QTreeWidgetItem(valuesBase, QStringList("Values found only in " + interestedFilename));
+                        }
+                        new QTreeWidgetItem(valuesInterested, QStringList(byteValue));
                         interestedHadUnique = true;
                     }
                     if ((reference.values[i][j] > 0) && (interested.values[i][j] == 0) )
                     {
-                        if (!uniqueInterested) valuesReference->addChild(detail);
+                        if (!uniqueInterested) {
+                            if (!valuesReference)
+                            {
+                                valuesReference = 
+                                    new QTreeWidgetItem(valuesBase, QStringList("Values found only in Side 2 - Reference frames"));
+                            }
+                            new QTreeWidgetItem(valuesReference, QStringList(byteValue));
+                        }
                     }
+                }
+                if (!valuesReference && !valuesInterested) {
+                    QString name = valuesBase->text(0) + " the same";
+                    valuesBase->setText(0, name);
                 }
             }
 
@@ -445,19 +445,11 @@ void FileComparatorWindow::calculateDetails()
             QHash<QString, QList<QString>>::const_iterator it = reference.signalInstances.constBegin();
             while (it != reference.signalInstances.constEnd())
             {
-                QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
-                valuesBase->setText(0, "Signal " + it.key());
-                sharedItem->addChild(valuesBase);
-                QTreeWidgetItem *valuesInterested = new QTreeWidgetItem();
-                valuesInterested->setText(0, "Values found only in " + interestedFilename);
-                QTreeWidgetItem * valuesReference = nullptr;
-                if (!uniqueInterested)
-                {
-                    valuesReference = new QTreeWidgetItem();
-                    valuesReference->setText(0, "Values found only in Side 2 - Reference frames");
-                }
-                valuesBase->addChild(valuesInterested);
-                if (!uniqueInterested) valuesBase->addChild(valuesReference);
+                QTreeWidgetItem *valuesBase = 
+                    new QTreeWidgetItem(sharedItem, QStringList("Signal " + it.key()));
+
+                QTreeWidgetItem *valuesInterested = nullptr;
+                QTreeWidgetItem *valuesReference = nullptr;
 
                 QList<QString> refVals = it.value();
                 QList<QString> interestedVals = interested.signalInstances[it.key()];
@@ -466,9 +458,13 @@ void FileComparatorWindow::calculateDetails()
                     if (!interestedVals.contains(str))
                     {
                         qDebug() << "Interested frames didn't contain value: " << str << " in signal " << it.key();
-                        QTreeWidgetItem *detail = new QTreeWidgetItem();
-                        detail->setText(0, str);
-                        valuesReference->addChild(detail);
+
+                        if (!valuesReference)
+                        {
+                            valuesReference = 
+                                new QTreeWidgetItem(valuesBase, QStringList("Values found only in Side 2 - Reference frames"));
+                        }
+                        new QTreeWidgetItem(valuesReference, QStringList(str));
                     }
                 }
                 qApp->processEvents();
@@ -477,15 +473,26 @@ void FileComparatorWindow::calculateDetails()
                     if (!refVals.contains(str))
                     {
                         qDebug() << "Reference frames didn't contain value: " << str << " in signal " << it.key();
-                        QTreeWidgetItem *detail = new QTreeWidgetItem();
-                        detail->setText(0, str);
-                        valuesInterested->addChild(detail);
+
+                        if (!valuesInterested) {
+                            valuesInterested = 
+                                new QTreeWidgetItem(valuesBase, QStringList("Values found only in " + interestedFilename));
+                        }
+                        new QTreeWidgetItem(valuesInterested, QStringList(str));
                     }
                 }
+                if (!valuesReference && !valuesInterested) {
+                    QString name = valuesBase->text(0) + " the same";
+                    valuesBase->setText(0, name);
+                }
+
                 ++it;
             }
 
-            if (interestedHadUnique || !uniqueInterested) sharedBase->addChild(sharedItem);
+            if (interestedHadUnique || !uniqueInterested)
+                sharedBase->addChild(sharedItem);
+            else
+                delete sharedItem;
         }
     }
 
@@ -499,20 +506,16 @@ void FileComparatorWindow::calculateDetails()
             unsigned int keytwo = itwo.key();
             if (!interestedIDs.contains(keytwo))
             {
-                QTreeWidgetItem *valuesBase = new QTreeWidgetItem();
-                DBC_MESSAGE *msg = dbcHandler->findMessage(keytwo);
-                if (msg)
-                {
-                    valuesBase->setText(0, Utility::formatHexNum(keytwo) + " (" + msg->name + ")" );
-                }
-                else valuesBase->setText(0, Utility::formatHexNum(keytwo));
-                referenceOnlyBase->addChild(valuesBase);
+                new QTreeWidgetItem(referenceOnlyBase, QStringList(messageName(keytwo)));
             }
         }
     }
 
     ui->treeDetails->addTopLevelItem(interestedOnlyBase);
-    if (!uniqueInterested) ui->treeDetails->addTopLevelItem(referenceOnlyBase);
+    if (!uniqueInterested)
+        ui->treeDetails->addTopLevelItem(referenceOnlyBase);
+    else
+        delete referenceOnlyBase;
     ui->treeDetails->addTopLevelItem(sharedBase);
 
     //ui->treeDetails->setSortingEnabled(true);
@@ -568,5 +571,14 @@ void FileComparatorWindow::saveDetails()
 
         outFile.close();
     }
+}
+
+QString FileComparatorWindow::messageName(uint32_t id) const
+{
+    DBC_MESSAGE *msg = dbcHandler->findMessage(id);
+    QString name = Utility::formatCANID(id);
+    if (msg)
+        name += " (" + msg->name + ")";
+    return name;
 }
 
