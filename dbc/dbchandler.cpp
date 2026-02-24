@@ -271,7 +271,12 @@ DBCFile::DBCFile(const DBCFile& cpy) : QObject()
 
     for (DBC_NODE* srcNode : cpy.dbc_nodes) {
         if (srcNode) {
-            dbc_nodes.append(new DBC_NODE(*srcNode)); // deep copy not just pointers
+            DBC_NODE *newSrc = new DBC_NODE(*srcNode);  // deep copy not just pointers
+            dbc_nodes.append(newSrc);
+            // update message sender
+            const auto msgs = messageHandler->findMsgsByNode(srcNode);    // search by old node
+            for (DBC_MESSAGE *msg : msgs)
+                msg->sender = newSrc;
         }
     }
 
@@ -293,18 +298,17 @@ DBCFile::~DBCFile()
     clearAndDelete(dbc_nodes);
 }
 
-DBCFile& DBCFile::operator=(const DBCFile& cpy)
+DBCFile& DBCFile::operator=(DBCFile cpy)
 {
     if (this != &cpy) // protect against invalid self-assignment
     {
-        messageHandler = cpy.messageHandler;
-        fileName = cpy.fileName;
-        filePath = cpy.filePath;
-        assocBuses = cpy.assocBuses;
-        dbc_nodes.clear();
-        dbc_nodes.append(cpy.dbc_nodes);
-        dbc_attributes.clear();
-        dbc_attributes.append(cpy.dbc_attributes);
+        std::swap(messageHandler, cpy.messageHandler);
+        std::swap(fileName, cpy.fileName);
+        std::swap(filePath, cpy.filePath);
+        std::swap(assocBuses, cpy.assocBuses);
+        std::swap(dbc_nodes, cpy.dbc_nodes);
+        std::swap(dbc_attributes, cpy.dbc_attributes);
+        std::swap(isDirty, cpy.isDirty);
     }
     return *this;
 }

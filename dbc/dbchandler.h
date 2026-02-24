@@ -67,7 +67,7 @@ public:
     DBCFile();
     DBCFile(const DBCFile& cpy);
     ~DBCFile();
-    DBCFile& operator=(const DBCFile& cpy);
+    DBCFile& operator=(DBCFile cpy);
     DBC_NODE *findNodeByName(QString name);
     DBC_NODE *findNodeByNameAndComment(QString fullname);
     DBC_NODE *findNodeByIdx(int idx);
