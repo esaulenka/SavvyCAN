@@ -688,16 +688,20 @@ bool FrameFileIO::isCRTDFile(QString filename)
                 QList<QByteArray> tokens = line.split(' ');
                 if (tokens.length() > 2)
                 {
-                    char firstChar = tokens[1].left(1)[0];
-                    if (firstChar >= '1' && firstChar <= '9')
+                    QByteArray type = tokens[1];   // R11 .. T29
+                    if (type.size() >= 3)
                     {
-                        tokens[1].remove(0,1); // Remove leading digit (bus number)
-                        firstChar = tokens[1].left(1)[0];
-                    }
-                    if (firstChar == 'R' || firstChar == 'T')
-                    {
-                        if (tokens[1] == "R29" || tokens[1] == "T29") isMatch = true;
-                        if (tokens[1] == "R11" || tokens[1] == "T11") isMatch = true;
+                        char firstChar = type.left(1)[0];
+                        if (firstChar >= '1' && firstChar <= '9')
+                        {
+                            type.remove(0,1); // Remove leading digit (bus number)
+                            firstChar = type.left(1)[0];
+                        }
+                        if (firstChar == 'R' || firstChar == 'T')
+                        {
+                            if (type == "R29" || type == "T29") isMatch = true;
+                            if (type == "R11" || type == "T11") isMatch = true;
+                        }
                     }
                 }
                 else isMatch = false;
