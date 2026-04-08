@@ -68,6 +68,7 @@ DBCLoadSaveWindow::DBCLoadSaveWindow(const QVector<CommFrame> *frames, QWidget *
     connect(ui->btnNewDBC, &QAbstractButton::clicked, this, &DBCLoadSaveWindow::newFile);
     connect(ui->tableFiles, &QTableWidget::cellChanged, this, &DBCLoadSaveWindow::cellChanged);
     connect(ui->tableFiles, &QTableWidget::cellDoubleClicked, this, &DBCLoadSaveWindow::cellDoubleClicked);
+    connect(ui->btnReload, &QAbstractButton::clicked, this, &DBCLoadSaveWindow::reloadFile);
 
     editorWindow = new DBCMainEditor(frames, this);
     currentlyEditingFile = nullptr;
@@ -84,8 +85,7 @@ QComboBox * DBCLoadSaveWindow::addMatchingCriteriaCombobox(int row)
     item->addItem("J1939");
     item->addItem("GMLAN");
     ui->tableFiles->setCellWidget(row, 2, item);
-    connect(item, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
-        [this](int box_idx) { matchingCriteriaChanged(box_idx); } );
+    connect(item, &QComboBox::currentIndexChanged, this, &DBCLoadSaveWindow::matchingCriteriaChanged);
     return item;
 }
 
@@ -137,8 +137,8 @@ bool DBCLoadSaveWindow::eventFilter(QObject *obj, QEvent *event)
 
 void DBCLoadSaveWindow::newFile()
 {
-    int idx = dbcHandler->createBlankFile();
-    idx = ui->tableFiles->rowCount();
+    dbcHandler->createBlankFile();
+    int idx = ui->tableFiles->rowCount();
     ui->tableFiles->insertRow(ui->tableFiles->rowCount());
     ui->tableFiles->setItem(idx, 0, new QTableWidgetItem("UNNAMEDFILE"));
     ui->tableFiles->setItem(idx, 1, new QTableWidgetItem("-1"));
@@ -154,7 +154,6 @@ void DBCLoadSaveWindow::newFile()
 void DBCLoadSaveWindow::loadFile()
 {
     DBCFile *file = nullptr;
-    QString filename;
     QFileDialog dialog;
     QSettings settings;
 
@@ -170,7 +169,7 @@ void DBCLoadSaveWindow::loadFile()
 
     if (dialog.exec() == QDialog::Accepted)
     {
-        filename = dialog.selectedFiles()[0];
+        QString filename = dialog.selectedFiles()[0];
         //right now there is only one file type that can be loaded here so just do it.
         settings.setValue("DBC/LoadSaveDirectory", dialog.directory().path());
 
@@ -222,9 +221,19 @@ void DBCLoadSaveWindow::loadFile()
     }
 }
 
-void DBCLoadSaveWindow::loadJSON()
+void DBCLoadSaveWindow::reloadFile()
 {
+    int idx = ui->tableFiles->currentRow();
+    DBCFile *dbc = dbcHandler->getFileByIdx(idx);
+    if (!dbc) return;
 
+    QFileInfo dbcName(dbc->getFullFilename());
+    if (dbcName.completeSuffix() == "dbc")
+    {
+        dbc->loadFile(dbcName.filePath());
+        qDebug() << "reload" << dbcName;
+    }
+    //  TODO load JSON and CSV
 }
 
 void DBCLoadSaveWindow::saveFile()
@@ -266,6 +275,7 @@ void DBCLoadSaveWindow::moveUp()
     if (idx < 1) return;
     dbcHandler->swapFiles(idx - 1, idx);
     swapTableRows(true);
+    ui->tableFiles->setCurrentCell(idx - 1, ui->tableFiles->currentRow());
     updateSettings();
 }
 
@@ -276,6 +286,7 @@ void DBCLoadSaveWindow::moveDown()
     if (idx > (dbcHandler->getFileCount() - 2)) return;
     dbcHandler->swapFiles(idx, idx + 1);
     swapTableRows(false);
+    ui->tableFiles->setCurrentCell(idx + 1, ui->tableFiles->currentRow());
     updateSettings();
 }
 
